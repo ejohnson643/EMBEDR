@@ -39,6 +39,94 @@ import utility as utl
 EPSILON = np.finfo(np.float64).eps
 
 class EMBEDR:
+    """Implement the EMBEDR algorithm on a DRA
+
+    Parameters
+    ----------
+    n_components: int
+        Dimensionality of the embedding space.  Default is 2.
+
+    perplexity: float
+        Similar to the perplexity parameter from van der Maaten (2008); sets 
+        the scale of the affinity kernel used to measure embedding quality.  
+        NOTE: In the EMBEDR algorithm, this parameter is used EVEN WHEN NOT 
+        USING t-SNE!  Default is 30.
+
+    dimred_alg: str
+        Dimensionality reduction algorithm to use.  Currently only t-SNE, UMAP,
+        and PCA are accepted.
+
+    dimred_params: dict
+        Parameters to pass to the dimensionality reduction algorithms.  For
+        t-SNE, the fields 'n_iter', 'exaggeration', 'early_exag_iter',
+        'exag_mom', and 'momentum' are directly used and other parameters that
+        can be sent to openTSNE's `TSNEEmbedding` class should be set as a
+        dictionary under the key 'openTSNE_params'.  For UMAP and PCA, the
+        dictionary is fed directly to the UMAP and PCA classes, respectively.
+        (This is to improve the efficiency of t-SNE by reducing re-calculations
+        of certain parameters.)  To see the default structure of these 
+        parameters, run the quickstart example and examine 
+        embedr_obj.tSNE_params.
+
+    n_data_embed: int
+        The number of times to embed the data.  Default is 1.  This parameter
+        has no effect for deterministic DRAs (PCA).
+
+    n_null_embed: int
+        The number of null data sets to generate and embed.  Default is 1.
+        See Johnson, Kath, and Mani (2020) for recommendations on setting this
+        parameter.
+
+    random_state: Union[int, RandomState]
+        If the value is an integer, then the input `random_state` is used as a
+        seed to create a RandomState instance. If the input value is a
+        `RandomState` instance, then it will be used as the RNG. If the input
+        value is None, then the RNG is the `RandomState` instance provided by
+        `np.random`.
+
+    cache_results: bool
+        A flag indicating whether to store calculated embeddings and affinity
+        matrices for repeated use.  Default is True.  If set to False, the
+        EMBEDR object will always calculate affinity matrices, embeddings, and
+        p-values from scratch.
+
+    project_dir: str
+        Path to folder for caching results.  Not used if `cache_results` set to
+        `False`.  Default is "./Embeddings".
+
+    project_name: str
+        Name of project.  Not used if `cache_results` is set to `False`.
+        Default is "default_project".
+
+    n_jobs: int
+        Number of threads to use when finding nearest neighbors. This follows 
+        the scikit-learn convention: ``-1`` means to use all processors, ``-2``
+        indicates that all but one processor should be used, etc.
+
+    verbose: int
+        Integer flag indicating level of verbosity to use in output. Setting to
+        -1 will suppress all output.
+
+    Attributes
+    ----------
+    n_samples: int
+        Number of samples in supplied data `X`
+
+    n_features: int
+        Number of features in supplied data `X`
+
+    data_Y: (n_data_embed x n_samples x n_components) array
+        Data `X` embedded `n_data_embed` times by `dimred_alg`.
+
+    null_Y: (n_null_embed x n_samples x n_components) array
+        Null data embedded `n_null_embed` times by `dimred_alg`.  To recover
+        the high-dimensional null data, use `utility.generate_nulls(X)`.
+
+    
+    """
+
+
+
 
     valid_DRAs = ['t-sne', 'tsne', 'umap', 'pca']
 
@@ -783,26 +871,23 @@ if __name__ == "__main__":
 
     plt.close('all')
 
-    # X = np.loadtxt("./Data/mnist2500_X.txt")
-    import pandas as pd
-    X = pd.read_csv("../Data/TabulaMuris/FACS/Marrow_PCA_Embeddings.csv")
-    X = X.values[:, 1:]
+    X = np.loadtxt("./Data/mnist2500_X.txt")
 
     tSNE_embed = EMBEDR(random_state=1, verbose=5,
                         n_data_embed=3,
                         n_null_embed=5,
-                        project_name='tSNE_Marrow_FACS_test')
+                        project_name='tSNE_test')
     tSNE_Y = tSNE_embed.fit_transform(X)
 
     UMAP_embed = EMBEDR(dimred_alg='UMAP', random_state=1, verbose=5,
                         n_data_embed=7,
                         n_null_embed=12,
-                        project_name='UMAP_Marrow_FACS_test')
+                        project_name='UMAP_test')
     UMAP_Y = UMAP_embed.fit_transform(X)
 
     PCA_embed = EMBEDR(dimred_alg='PCA', random_state=1, verbose=5,
                        n_null_embed=10,
-                       project_name='PCA_Marrow_FACS_test')
+                       project_name='PCA_test')
     PCA_Y = PCA_embed.fit_transform(X)
 
     fig, [ax1, ax2, ax3] = plt.subplots(1, 3, figsize=(12, 5))

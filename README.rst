@@ -1,7 +1,7 @@
 EMBEDR: Statistically Assess Dimensionality Reduction Quality
 =============================================================
 
-*E*mpirical *M*arginal resampling *B*etter *E*valuates *D*imensionality *R*eduction [1]_ is an algorithm for assessing the quality of a data set's embedding via a dimensionality reduction algorithm.  The EMBEDR algorithm works by performing a statistical test for each sample in the data set to evaluate the likelihood that random chance would yield similar levels of structure.
+*E*\ mpirical *M*\ arginal resampling *B*\ etter *E*\ valuates *D*\ imensionality *R*\ eduction [1]_ is an algorithm for assessing the quality of a data set's embedding via a dimensionality reduction algorithm.  The EMBEDR algorithm works by performing a statistical test for each sample in the data set to evaluate the likelihood that random chance would yield similar levels of structure.
 
 .. figure:: docs/source/images/EMBEDR_test_figure.png
     :alt: Tabula Muris mouse marrow tissue embeddings

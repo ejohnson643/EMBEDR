@@ -1,0 +1,12 @@
+# Cached embeddings #
+#####################
+*.pkl
+
+# Python generated files #
+##########################
+*.pyc
+__pycache__/*
+
+# OS generated files #
+######################
+.DS_Store
