@@ -106,23 +106,6 @@ class EMBEDR:
     verbose: int
         Integer flag indicating level of verbosity to use in output. Setting to
         -1 will suppress all output.
-
-    Attributes
-    ----------
-    n_samples: int
-        Number of samples in supplied data `X`
-
-    n_features: int
-        Number of features in supplied data `X`
-
-    data_Y: (n_data_embed x n_samples x n_components) array
-        Data `X` embedded `n_data_embed` times by `dimred_alg`.
-
-    null_Y: (n_null_embed x n_samples x n_components) array
-        Null data embedded `n_null_embed` times by `dimred_alg`.  To recover
-        the high-dimensional null data, use `utility.generate_nulls(X)`.
-
-    
     """
 
 
@@ -192,6 +175,125 @@ class EMBEDR:
         self.do_cache = cache_results
 
     def fit(self, X):
+        """Embeds data `X` in lower-dimensional space using indicated DRA.
+
+        This method also automatically generates the required null embeddings
+        and quality statistics in order to assign each sample in `X` a
+        "p-value" indicating the likelihood that a random sample would be
+        embedded that well.
+
+        Attributes
+        ----------
+        n_samples: int
+            Number of samples in supplied data `X`.
+
+        n_features: int
+            Number of features in supplied data `X`.
+
+        data_Y: (n_data_embed x n_samples x n_components) array
+            Data `X` embedded `n_data_embed` times by `dimred_alg`.
+
+        null_Y: (n_null_embed x n_samples x n_components) array
+            Null data embedded `n_null_embed` times by `dimred_alg`.  To
+            recover the high-dimensional null data, use
+            `utility.generate_nulls(X)`.
+
+        EES_data: (n_data_embed x n_samples) array
+            Quality statistics for each sample in the original data set
+            (for each) embedding.
+
+        EES_null: (n_null_embed x n_samples) array
+            Quality statistics for each sample in each null data set.
+
+        pVals: (n_data_embed x n_samples) array
+            EMBEDR p-values. Summarized across `N_data_embed` embeddings using
+            Simes' method.
+
+        Example
+        -------
+        > from embedr import EMBEDR
+        > import numpy as np
+        > X = np.loadtxt("./Data/mnist2500_X.txt")
+        >
+        > embedr_obj = EMBEDR(verbose=1)
+        > embedr_obj.fit(X)
+
+        EMBEDR: Fitting 2500 x 784 data!
+
+        ===> Finding 90 nearest neighbors using Annoy approximate search using
+        euclidean distance...
+           --> Time elapsed: 1.08 seconds
+        ===> Calculating affinity matrix...
+           --> Time elapsed: 0.14 seconds
+
+        EMBEDR: Performing dimensionality reduction with t-SNE!
+
+        Making embedding 1/1
+        ===> Running optimization with exaggeration=12.00, lr=208.33 for 250
+        iterations...
+        Iteration   50, KL divergence 4.2395, 50 iterations in 1.2785 sec
+        Iteration  100, KL divergence 3.8564, 50 iterations in 1.3624 sec
+        Iteration  150, KL divergence 3.7929, 50 iterations in 1.3644 sec
+        Iteration  200, KL divergence 3.7916, 50 iterations in 1.3373 sec
+        Iteration  250, KL divergence 3.7915, 50 iterations in 1.3015 sec
+           --> Time elapsed: 6.64 seconds
+        ===> Running optimization with exaggeration=1.00, lr=208.33 for 750
+        iterations...
+        Iteration   50, KL divergence 1.8392, 50 iterations in 1.2951 sec
+        Iteration  100, KL divergence 1.5378, 50 iterations in 1.3905 sec
+        Iteration  150, KL divergence 1.4119, 50 iterations in 1.3123 sec
+        Iteration  200, KL divergence 1.3416, 50 iterations in 1.8416 sec
+        Iteration  250, KL divergence 1.3009, 50 iterations in 2.8216 sec
+        Iteration  300, KL divergence 1.2757, 50 iterations in 3.3737 sec
+        Iteration  350, KL divergence 1.2605, 50 iterations in 4.6760 sec
+        Iteration  400, KL divergence 1.2502, 50 iterations in 4.8709 sec
+        Iteration  450, KL divergence 1.2412, 50 iterations in 5.4483 sec
+        Iteration  500, KL divergence 1.2357, 50 iterations in 5.5746 sec
+        Iteration  550, KL divergence 1.2308, 50 iterations in 5.9486 sec
+        Iteration  600, KL divergence 1.2251, 50 iterations in 6.5560 sec
+        Iteration  650, KL divergence 1.2220, 50 iterations in 7.8521 sec
+        Iteration  700, KL divergence 1.2186, 50 iterations in 8.0716 sec
+        Iteration  750, KL divergence 1.2148, 50 iterations in 7.9768 sec
+           --> Time elapsed: 69.01 seconds
+
+        Generating null embeddings!
+
+        Making embedding 1/1
+        ===> Finding 90 nearest neighbors using Annoy approximate search using
+        euclidean distance...
+           --> Time elapsed: 1.52 seconds
+        ===> Calculating affinity matrix...
+           --> Time elapsed: 0.17 seconds
+        ===> Running optimization with exaggeration=12.00, lr=208.33 for 250
+        iterations...
+        Iteration   50, KL divergence 3.6849, 50 iterations in 1.4261 sec
+        Iteration  100, KL divergence 3.6849, 50 iterations in 1.4006 sec
+        Iteration  150, KL divergence 3.6849, 50 iterations in 1.3852 sec
+        Iteration  200, KL divergence 3.6849, 50 iterations in 1.4197 sec
+        Iteration  250, KL divergence 3.6849, 50 iterations in 1.3978 sec
+           --> Time elapsed: 7.03 seconds
+        ===> Running optimization with exaggeration=1.00, lr=208.33 for 750
+        iterations...
+        Iteration   50, KL divergence 3.6849, 50 iterations in 1.3969 sec
+        Iteration  100, KL divergence 3.5462, 50 iterations in 1.4457 sec
+        Iteration  150, KL divergence 3.4705, 50 iterations in 1.4580 sec
+        Iteration  200, KL divergence 3.4616, 50 iterations in 1.4063 sec
+        Iteration  250, KL divergence 3.4572, 50 iterations in 1.4360 sec
+        Iteration  300, KL divergence 3.4546, 50 iterations in 1.4415 sec
+        Iteration  350, KL divergence 3.4529, 50 iterations in 1.4424 sec
+        Iteration  400, KL divergence 3.4521, 50 iterations in 1.4172 sec
+        Iteration  450, KL divergence 3.4517, 50 iterations in 1.4487 sec
+        Iteration  500, KL divergence 3.4512, 50 iterations in 1.5098 sec
+        Iteration  550, KL divergence 3.4508, 50 iterations in 1.4553 sec
+        Iteration  600, KL divergence 3.4507, 50 iterations in 1.4576 sec
+        Iteration  650, KL divergence 3.4505, 50 iterations in 1.4777 sec
+        Iteration  700, KL divergence 3.4505, 50 iterations in 1.4248 sec
+        Iteration  750, KL divergence 3.4502, 50 iterations in 1.4421 sec
+           --> Time elapsed: 21.66 seconds
+
+        Calculating EES using 1 embeddings and 1 nulls!
+
+        """
 
         err_str = "Input data must be an N_samples x N_features numpy array."
         assert isinstance(X, np.ndarray), err_str
@@ -203,7 +305,7 @@ class EMBEDR:
         if self.verbose >= 0:
             print(f"\nEMBEDR: Fitting {n_samp} x {n_feat} data!\n")
 
-        r_seed = self.random_state.get_state()[1][0]
+        r_seed = self.random_state.get_state()[1][0] % (2**31)
 
         if self.verbose > 1:
             print(f"Generating high-dim affinity matrix (P)")
@@ -254,6 +356,57 @@ class EMBEDR:
         self._calc_EES()
 
     def fit_transform(self, X):
+        """Embeds data `X` in lower-dimensional space using indicated DRA.
+
+        This method also automatically generates the required null embeddings
+        and quality statistics in order to assign each sample in `X` a
+        "p-value" indicating the likelihood that a random sample would be
+        embedded that well.
+
+        Returns:
+        --------
+        data_Y: (n_data_embed x n_samples x n_components) array
+            Embedded data in `n_components` space.
+
+        Attributes
+        ----------
+        n_samples: int
+            Number of samples in supplied data `X`.
+
+        n_features: int
+            Number of features in supplied data `X`.
+
+        data_Y: (n_data_embed x n_samples x n_components) array
+            Data `X` embedded `n_data_embed` times by `dimred_alg`.
+
+        null_Y: (n_null_embed x n_samples x n_components) array
+            Null data embedded `n_null_embed` times by `dimred_alg`.  To
+            recover the high-dimensional null data, use
+            `utility.generate_nulls(X)`.
+
+        EES_data: (n_data_embed x n_samples) array
+            Quality statistics for each sample in the original data set
+            (for each) embedding.
+
+        EES_null: (n_null_embed x n_samples) array
+            Quality statistics for each sample in each null data set.
+
+        pVals: (n_data_embed x n_samples) array
+            EMBEDR p-values. Summarized across `N_data_embed` embeddings using
+            Simes' method.
+
+        Example
+        -------
+        > from embedr import EMBEDR
+        > import numpy as np
+        > X = np.loadtxt("./Data/mnist2500_X.txt")
+        >
+        > embedr_obj = EMBEDR()
+        > data_Y = embedr_obj.fit_transform(X)
+
+        EMBEDR: Fitting 2500 x 784 data!
+
+        """
         self.fit(X)
 
         return self.data_Y
@@ -790,7 +943,6 @@ class EMBEDR:
 
     def plot(self,
              ax=None,
-             cite_EMBEDR=True,
              cax=None,
              show_cbar=True,
              embed_2_show=0,
@@ -802,7 +954,72 @@ class EMBEDR:
              scatter_alpha=0.4,
              scatter_kwds={},
              text_kwds={},
-             cbar_kwds={}):
+             cbar_kwds={},
+             cite_EMBEDR=True):
+        """Generates scatter plot of embedded data colored by EMBEDR p-value
+
+        Parameters
+        ----------
+        ax: matplotlib.axes
+            Axis on which to place the scatter plot.  If None, axes will be
+            generated.  Default is None.
+
+        cax: matplotlib.axes
+            Axis on which to place the colorbar.  If None, axes will be
+            generated.  Default is None.
+
+        show_cbar: bool
+            Flag indicating whether to show the colorbar.  Default is True.
+
+        embed_2_show: int
+            Index in range 0:`n_data_embed` indicating which embedding to plot.
+            Default is 0.
+
+        plot_data: bool
+            Flag indicating whether to plot data or null embeddings.
+
+        cbar_ticks: array-like
+            If not None, values to use to set the colorbar ticks.  Default is
+            None, which results in [0, 1, 2, 3, 4].
+
+        cbar_ticklabels: array-like
+            If not `None`, values to use to label the colorbar ticks. Default
+            is None.
+
+        pVal_clr_change: array-like
+            -log10(pVals) at which to break up the categorical color bar.
+            Default is [0, 1, 2, 3, 4].
+
+        scatter_s: float
+            markersize parameter for `plt.scatter`. Default is 5.
+
+        scatter_alpha: float in [0, 1]
+            "alpha" parameter for `plt.scatter`.  Default is 0.4.
+
+        scatter_kwds: dict
+            Other keywords for `matplotlib.pyplot.scatter`.  Default is {}.
+
+        text_kwds: dict
+            Other keywords for `matplotlib.pyplot.text`.  Default is {}.
+
+        cbar_kwds: dict
+            Other keywords for `fig.colorbar`.  Default is {}.
+    
+        cite_EMBEDR: bool
+            Flag indicating whether or not to place EMBEDR citation on the
+            plot.  Default is `True`.
+
+        Returns
+        -------
+        ax: matplotlib.axes
+            Axis on which the data have been plotted.
+
+        Example
+        -------
+        > import matplotlib.pyplot as plt
+        > fig, ax = plt.subplots(1, 1)
+        > ax = embedr_obj.plot(ax=ax)
+        """
 
         fig = plt.gcf()
         if ax is None:
