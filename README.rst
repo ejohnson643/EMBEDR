@@ -1,7 +1,7 @@
 EMBEDR: Statistically Assess Dimensionality Reduction Quality
 =============================================================
 
-**E**\ mpirical **M**\ arginal resampling **B**\ etter **E**\ valuates **D**\ imensionality **R**\ eduction [1]_ is an algorithm for assessing the quality of a data set's embedding via a dimensionality reduction algorithm.  The EMBEDR algorithm works by performing a statistical test for each sample in the data set to evaluate the likelihood that random chance would yield similar levels of structure.
+**E**\ mpirical **M**\ arginal resampling **B**\ etter **E**\ valuates **D**\ imensionality **R**\ eduction (**EMBEDR**) [1]_ is an algorithm for assessing the quality of a data set's embedding via a dimensionality reduction algorithm.  The EMBEDR algorithm works by performing a statistical test for each sample in the data set to evaluate the likelihood that random chance would yield similar levels of structure.
 
 .. figure:: docs/source/images/EMBEDR_test_figure.png
     :alt: Tabula Muris mouse marrow tissue embeddings
@@ -37,6 +37,8 @@ Notes
 -----
 
 The EMBEDR package provided here currently only supports the evaluation of embeddings performed by t-SNE, UMAP, and PCA.  A more complete package that can evaluate arbitrary dimensionality reduction algorithms is currently in development.
+
+The package currently requires `openTSNE <https://opentsne.readthedocs.io/en/latest/>` to work, as well as `numpy`, `matplotlib`, and `scikit-learn`.
 
 Citation
 --------
