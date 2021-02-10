@@ -38,7 +38,7 @@ Notes
 
 The EMBEDR package provided here currently only supports the evaluation of embeddings performed by t-SNE, UMAP, and PCA.  A more complete package that can evaluate arbitrary dimensionality reduction algorithms is currently in development.
 
-The package currently requires `openTSNE <https://opentsne.readthedocs.io/en/latest/>` to work, as well as `numpy`, `matplotlib`, and `scikit-learn`.
+The package currently requires `openTSNE <https://opentsne.readthedocs.io/en/latest/>`__ to work, as well as `numpy`, `matplotlib`, and `scikit-learn`.
 
 Citation
 --------
