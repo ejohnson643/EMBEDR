@@ -16,8 +16,6 @@
     provided here is a sort of a quickstart to use EMBEDR, but a more efficient
     implementation is currently being developed.
 
-
-
 ###############################################################################
 """
 import matplotlib.pyplot as plt
@@ -38,6 +36,7 @@ import utility as utl
 
 EPSILON = np.finfo(np.float64).eps
 
+
 class EMBEDR:
     """Implement the EMBEDR algorithm on a DRA
 
@@ -47,9 +46,9 @@ class EMBEDR:
         Dimensionality of the embedding space.  Default is 2.
 
     perplexity: float
-        Similar to the perplexity parameter from van der Maaten (2008); sets 
-        the scale of the affinity kernel used to measure embedding quality.  
-        NOTE: In the EMBEDR algorithm, this parameter is used EVEN WHEN NOT 
+        Similar to the perplexity parameter from van der Maaten (2008); sets
+        the scale of the affinity kernel used to measure embedding quality.
+        NOTE: In the EMBEDR algorithm, this parameter is used EVEN WHEN NOT
         USING t-SNE!  Default is 30.
 
     dimred_alg: str
@@ -64,8 +63,8 @@ class EMBEDR:
         dictionary under the key 'openTSNE_params'.  For UMAP and PCA, the
         dictionary is fed directly to the UMAP and PCA classes, respectively.
         (This is to improve the efficiency of t-SNE by reducing re-calculations
-        of certain parameters.)  To see the default structure of these 
-        parameters, run the quickstart example and examine 
+        of certain parameters.)  To see the default structure of these
+        parameters, run the quickstart example and examine
         embedr_obj.tSNE_params.
 
     n_data_embed: int
@@ -107,9 +106,6 @@ class EMBEDR:
         Integer flag indicating level of verbosity to use in output. Setting to
         -1 will suppress all output.
     """
-
-
-
 
     valid_DRAs = ['t-sne', 'tsne', 'umap', 'pca']
 
@@ -887,7 +883,7 @@ class EMBEDR:
         except (KeyError, FileNotFoundError):
 
             dP = self._affmat.P.toarray()
-            dP = dP / dP.sum(axis=1)
+            dP = dP / dP.sum(axis=1)[:, np.newaxis]
 
             EES_data = np.zeros((self.n_data_embed, self.n_samples))
 
@@ -1004,7 +1000,7 @@ class EMBEDR:
 
         cbar_kwds: dict
             Other keywords for `fig.colorbar`.  Default is {}.
-    
+
         cite_EMBEDR: bool
             Flag indicating whether or not to place EMBEDR citation on the
             plot.  Default is `True`.
