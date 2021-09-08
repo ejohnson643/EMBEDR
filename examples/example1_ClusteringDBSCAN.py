@@ -54,7 +54,7 @@ if __name__ == "__main__":
     ## Set the DBSCAN parameters based on the data.  If these don't work, 
     PWD_Y = np.triu(pwd(embedr_obj.data_Y[0], metric='euclidean'), k=1)
     n_pwd = n_samples * (n_samples - 1) / 2
-    eps = np.percentile(PWD_Y[PWD_Y.nonzero()], 1)
+    eps = np.percentile(PWD_Y[PWD_Y.nonzero()], 1.5)
 
     db_min_samp = int(n_samples / 100)
     # db_min_samp = 100
@@ -67,6 +67,8 @@ if __name__ == "__main__":
     dbObj.fit(embedr_obj.data_Y[0])
 
     db_labels = dbObj.labels_
+    colors = [(0,0,0) if dbl == -1 else sns.color_palette()[dbl]
+              for dbl in db_labels]
     unique_labels = np.sort(np.unique(db_labels))
     n_db_labels = len(unique_labels) - 1
 
@@ -75,9 +77,16 @@ if __name__ == "__main__":
     ## Generate a figure
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 
-    handle = ax.scatter(*embedr_obj.data_Y[0].T, s=2, c=db_labels,
-                        cmap='tab20')
-    h_cbar = plt.colorbar(handle, ax=ax)
+    handle = ax.scatter(*embedr_obj.data_Y[0].T, s=2, c=colors)
+
+    for lbl in unique_labels:
+        if lbl == -1:
+            _ = ax.scatter([], [], s=2, color='k', label='No Cluster')
+        else:
+            _ = ax.scatter([], [], s=2, color=sns.color_palette()[lbl],
+                           label=f'Cluster {lbl}')
+
+    _ = ax.legend()
 
     fig.tight_layout()
 
