@@ -1,7 +1,7 @@
 # EMBEDR v2.0
 
-Author: Eric Johnson
-Date Created: July 1, 2021
+Author: Eric Johnson \
+Date Created: July 1, 2021 \
 Email: eric.johnson643@gmail.com
 
 ## Overview
