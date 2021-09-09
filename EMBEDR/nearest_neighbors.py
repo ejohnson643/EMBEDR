@@ -425,7 +425,7 @@ class Annoy(kNNIndex):
 
     def _initialize_ANNOY_index(self, f):
         ## This is only imported if we need it
-        from EMBEDR.dependencies.annoy import AnnoyIndex
+        from .dependencies.annoy import AnnoyIndex
         return AnnoyIndex(f, self.metric)
 
     def query(self, query, k_NN):
