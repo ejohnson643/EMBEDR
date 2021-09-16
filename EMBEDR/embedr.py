@@ -1146,6 +1146,150 @@ class EMBEDR(object):
             err_str = f"Unknown p-Value summary method '{self.pVal_type}'..."
             raise ValueError(err_str)
 
+    def plot(self,
+             ax=None,
+             cax=None,
+             show_cbar=True,
+             embed_2_show=0,
+             plot_data=True,
+             cbar_ticks=None,
+             cbar_ticklabels=None,
+             pVal_clr_change=[0, 1, 2, 3, 4],
+             scatter_s=5,
+             scatter_alpha=0.4,
+             scatter_kwds={},
+             text_kwds={},
+             cbar_kwds={},
+             cite_EMBEDR=True):
+        """Generates scatter plot of embedded data colored by EMBEDR p-value
+
+        Parameters
+        ----------
+        ax: matplotlib.axes
+            Axis on which to place the scatter plot.  If None, axes will be
+            generated.  Default is None.
+
+        cax: matplotlib.axes
+            Axis on which to place the colorbar.  If None, axes will be
+            generated.  Default is None.
+
+        show_cbar: bool
+            Flag indicating whether to show the colorbar.  Default is True.
+
+        embed_2_show: int
+            Index in range 0:`n_data_embed` indicating which embedding to plot.
+            Default is 0.
+
+        plot_data: bool
+            Flag indicating whether to plot data or null embeddings.
+
+        cbar_ticks: array-like
+            If not None, values to use to set the colorbar ticks.  Default is
+            None, which results in [0, 1, 2, 3, 4].
+
+        cbar_ticklabels: array-like
+            If not `None`, values to use to label the colorbar ticks. Default
+            is None.
+
+        pVal_clr_change: array-like
+            -log10(pVals) at which to break up the categorical color bar.
+            Default is [0, 1, 2, 3, 4].
+
+        scatter_s: float
+            markersize parameter for `plt.scatter`. Default is 5.
+
+        scatter_alpha: float in [0, 1]
+            "alpha" parameter for `plt.scatter`.  Default is 0.4.
+
+        scatter_kwds: dict
+            Other keywords for `matplotlib.pyplot.scatter`.  Default is {}.
+
+        text_kwds: dict
+            Other keywords for `matplotlib.pyplot.text`.  Default is {}.
+
+        cbar_kwds: dict
+            Other keywords for `fig.colorbar`.  Default is {}.
+
+        cite_EMBEDR: bool
+            Flag indicating whether or not to place EMBEDR citation on the
+            plot.  Default is `True`.
+
+        Returns
+        -------
+        ax: matplotlib.axes
+            Axis on which the data have been plotted.
+
+        Example
+        -------
+        > import matplotlib.pyplot as plt
+        > fig, ax = plt.subplots(1, 1)
+        > ax = embedr_obj.plot(ax=ax)
+        """
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcl
+
+        fig = plt.gcf()
+        if ax is None:
+            ax = fig.gca()
+
+        if plot_data:
+            Y = self.data_Y[embed_2_show]
+        else:
+            Y = self.null_Y[embed_2_show]
+
+        [pVal_cmap,
+         pVal_cnorm] = utl.make_categ_cmap(change_points=pVal_clr_change)
+
+        color_bounds = np.linspace(pVal_clr_change[0],
+                                   pVal_clr_change[-1],
+                                   pVal_cmap.N)
+
+        pVals = -np.log10(self.pValues)
+
+        sort_idx = np.argsort(pVals)
+
+        h_ax = ax.scatter(*Y[sort_idx].T,
+                          s=scatter_s,
+                          c=pVals[sort_idx],
+                          cmap=pVal_cmap,
+                          norm=pVal_cnorm,
+                          alpha=scatter_alpha,
+                          **scatter_kwds)
+
+        if cite_EMBEDR:
+            _ = ax.text(0.02, 0.02,
+                        "Made with the EMBEDR package.",
+                        fontsize=6,
+                        transform=ax.transAxes,
+                        ha='left',
+                        va='bottom',
+                        **text_kwds)
+
+        if show_cbar:
+            cbar_ax = fig.colorbar(h_ax,
+                                   cax=cax,
+                                   boundaries=color_bounds,
+                                   ticks=[],
+                                   **cbar_kwds)
+            cbar_ax.ax.invert_yaxis()
+
+            if cbar_ticks is None:
+                cbar_ticks = pVal_clr_change
+            cbar_ax.set_ticks(cbar_ticks)
+
+            if cbar_ticklabels is None:
+                cbar_ticklabels = ['1',
+                                   '0.1',
+                                   r"$10^{-2}$",
+                                   r"$10^{-3}$",
+                                   r"$10^{-4}$"]
+            cbar_ax.set_ticklabels(cbar_ticklabels)
+
+            cbar_ax.ax.tick_params(length=0)
+            cbar_ax.ax.set_ylabel("EMBEDR p-Value")
+
+        return ax
+
 
 class EMBEDR_sweep(object):
 
