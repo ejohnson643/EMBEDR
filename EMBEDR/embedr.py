@@ -1509,4 +1509,13 @@ class EMBEDR_sweep(object):
             print(f"Hyperparameter array has been set as:")
             print(self.sweep_values)
 
+    def get_optimal_hyperparameters(self):
 
+        pVal_arr = np.asarray([self.pValues[hp] for hp in self.sweep_values])
+
+        opt_hp_idx = np.argmin(pVal_arr, axis=0)
+
+        if self.verbose >= 2:
+            print(f"Returning optimal '{self.sweep_type}' values!")
+
+        return self.sweep_values[opt_hp_idx].squeeze()
