@@ -1226,7 +1226,6 @@ class EMBEDR(object):
         > ax = embedr_obj.plot(ax=ax)
         """
         import matplotlib.pyplot as plt
-        import matplotlib.colors as mcl
 
         fig = plt.gcf()
         if ax is None:
@@ -1663,3 +1662,46 @@ class EMBEDR_sweep(object):
             print(f"Returning optimal '{self.sweep_type}' values!")
 
         return self.sweep_values[opt_hp_idx].squeeze()
+
+    def fit_samplewise_optimal(self):
+
+        try:
+            opt_hp_vals = self.get_optimal_hyperparameters()
+        except AttributeError:
+            err_str  = f"A hyperparameter sweep must be run before a sample"
+            err_str += f"-wise optimal embedding can be generated!"
+            raise AttributeError(err_str)
+
+        perp = knn = None
+        if self.sweep_type == 'perplexity':
+            perp = opt_hp_vals
+        else:
+            knn = opt_hp_vals
+        optObj = EMBEDR(perplexity=perp,
+                        n_neighbors=knn,
+                        kNN_metric=self.kNN_metric,
+                        kNN_alg=self.kNN_alg,
+                        kNN_params=self.kNN_params,
+                        aff_type=self.aff_type,
+                        aff_params=self.aff_params,
+                        n_components=self.n_components,
+                        DRA=self.DRA,
+                        DRA_params=self.DRA_params,
+                        EES_type=self.EES_type,
+                        EES_params=self.EES_params,
+                        pVal_type=self.pVal_type,
+                        n_data_embed=self.n_data_embed,
+                        n_null_embed=self.n_null_embed,
+                        n_jobs=self.n_jobs,
+                        random_state=self.rs,
+                        verbose=self.verbose,
+                        do_cache=self.do_cache,
+                        project_name=self.project_name,
+                        project_dir=self.project_dir)
+
+        optObj.fit(self.data_X)
+
+        self.opt_embed    = optObj.data_Y[:]
+        self.opt_data_EES = optObj.data_EES[:]
+        self.opt_null_EES = optObj.null_EES[:]
+        self.opt_pValues  = optObj.pValues[:]
