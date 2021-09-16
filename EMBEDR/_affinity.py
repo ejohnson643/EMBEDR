@@ -96,7 +96,7 @@ def fit_Gaussian_toEntropy(distances,
         ## outside of the meaningful part of the kernel.  The 2.33 comes from
         ## the z-score corresponding to a 98% probability region of a standard
         ## normal distribution.
-        tau_max_init = (2.33 ** 2) / (distances[:, 0].min() ** 2)
+        tau_max_init = (2.33 ** 2) / ((distances[:, 0].min() + EPSILON) ** 2)
     else:
         tau_max_init = tau_max
 

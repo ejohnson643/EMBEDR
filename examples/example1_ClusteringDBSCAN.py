@@ -51,7 +51,7 @@ if __name__ == "__main__":
     ## Generate a t-SNE embedding and EMBEDR p-Values.
     embedr_obj.fit(X)
 
-    ## Set the DBSCAN parameters based on the data.  If these don't work, 
+    ## Set the DBSCAN parameters based on the data.  If these don't work,
     PWD_Y = np.triu(pwd(embedr_obj.data_Y[0], metric='euclidean'), k=1)
     n_pwd = n_samples * (n_samples - 1) / 2
     eps = np.percentile(PWD_Y[PWD_Y.nonzero()], 1.5)
@@ -59,15 +59,15 @@ if __name__ == "__main__":
     db_min_samp = int(n_samples / 100)
     # db_min_samp = 100
 
-    print(f"DBSCAN parameters set at eps={eps:.2f} and minimum {db_min_samp}"
-          f" samples per anchor point.")
+    print(f"DBSCAN parameters set at eps={eps:.2f} and minimum"
+          f" {db_min_samp} samples per anchor point.")
 
     ## Cluster the resulting embedding
     dbObj = DBSCAN(eps=eps, min_samples=db_min_samp)
     dbObj.fit(embedr_obj.data_Y[0])
 
     db_labels = dbObj.labels_
-    colors = [(0,0,0) if dbl == -1 else sns.color_palette()[dbl]
+    colors = [(0, 0, 0) if dbl == -1 else sns.color_palette()[dbl]
               for dbl in db_labels]
     unique_labels = np.sort(np.unique(db_labels))
     n_db_labels = len(unique_labels) - 1

@@ -23,7 +23,7 @@ class EMBEDR(object):
                  perplexity=None,
                  n_neighbors=None,
                  # kNN graph parameters
-                 metric='euclidean',
+                 kNN_metric='euclidean',
                  kNN_alg='auto',
                  kNN_params={},
                  # Affinity matrix parameters
@@ -53,7 +53,7 @@ class EMBEDR(object):
         self.n_neighbors = n_neighbors
 
         ## kNN graph parameters
-        self.kNN_metric = metric
+        self.kNN_metric = kNN_metric
         self.kNN_alg = kNN_alg.lower()
         self.kNN_params = kNN_params
 
@@ -92,7 +92,7 @@ class EMBEDR(object):
             if path.isdir(project_dir):
                 self.project_dir = project_dir
             else:
-                err_str = f"Couldn't find project directory `{project_dir}`."
+                err_str  = f"Couldn't find project directory `{project_dir}`."
                 err_str += f" Please make sure this is a valid directory or"
                 err_str += f" turn off file caching (set `do_cache=False`)."
                 raise OSError(err_str)
@@ -228,7 +228,7 @@ class EMBEDR(object):
                 err_str += f"{self.n_samples - 1}!"
                 raise ValueError(err_str)
 
-            nn_arr = np.ones((self.n_samples)) * self.n_neighbors
+            nn_arr = (np.ones((self.n_samples)) * self.n_neighbors).astype(int)
 
         else:
             nn_arr = np.array(self.n_neighbors).astype(int).squeeze()
@@ -249,7 +249,7 @@ class EMBEDR(object):
             self.n_neighbors = nn_arr[:]
 
         self._nn_arr = nn_arr[:]
-        self._max_nn = self._nn_arr.max()
+        self._max_nn = int(self._nn_arr.max())
 
     def get_hash(self):
 
@@ -288,8 +288,6 @@ class EMBEDR(object):
         # If we're not caching, then just skip everything.
         if not self.do_cache:
             return None
-
-        ## First we 
 
         # First we set up the subfolder for this data set (hash)
         project_path = path.join(self.project_dir,
@@ -1151,6 +1149,364 @@ class EMBEDR(object):
 
 class EMBEDR_sweep(object):
 
-    def __init__(self,):
+    valid_hyperparameters = ['perplexity', 'n_neighbors']
+
+    def __init__(self,
+                 # Set hyperparameters to sweep
+                 sweep_values=None,
+                 sweep_type='perplexity',
+                 n_sweep_values=1,
+                 min_sweep_value=0.005,
+                 max_sweep_value=0.5,
+                 # kNN graph parameters
+                 kNN_metric='euclidean',
+                 kNN_alg='auto',
+                 kNN_params={},
+                 # Affinity matrix parameters
+                 aff_type="fixed_entropy_gauss",
+                 aff_params={},
+                 # Dimensionality reduction parameters
+                 n_components=2,
+                 DRA='tsne',
+                 DRA_params={},
+                 # Embedding statistic parameters
+                 EES_type="dkl",
+                 EES_params={},
+                 pVal_type="average",
+                 # Runtime parameters
+                 n_data_embed=1,
+                 n_null_embed=1,
+                 n_jobs=1,
+                 random_state=1,
+                 verbose=1,
+                 # File I/O parameters
+                 do_cache=True,
+                 project_name="EMBEDR_project",
+                 project_dir="./projects/"):
+
+        ## Set the verbosity for output level
+        self.verbose = float(verbose)
+        if self.verbose >= 1:
+            print(f"\nInitializing EMBEDR hyperparameter sweep!")
+
+        ## Check that a valid hyperparameter has been set for sweeping.
+        if sweep_type.lower() not in self.valid_hyperparameters:
+            err_str  = f"Unknown hyperparameter {sweep_type.lower()}..."
+            err_str += f" Accepted hyperparameters:"
+            raise ValueError(err_str + f" {self.valid_hyperparameters}.")
+        self.sweep_type = sweep_type.lower()
+
+        ## Do pre-checking of hyperparameter values and bounds...
+        ## ... If an array of hyperparameter values are supplied, check it!
+        if sweep_values is not None:
+            tmp = check_array(sweep_values,
+                              accept_sparse=False,   ## Don't accept sparse
+                              ensure_2d=False,       ## Don't enforce 2D array
+                              allow_nd=False,        ## Don't allow ndim > 2
+                              ensure_min_samples=1)  ## Requre 1 value in array
+
+            ## If an array is supplied, then we reset `n_sweep_values`,
+            ## `min/max_sweep_value` based on the array.  Defaults or other
+            ## inputs are ignored.
+            if self.verbose >= 3:
+                print(f"Array of hyperparameter values provided, ignoring"
+                      f" input values for `n_sweep_values`, `min_sweep_value,"
+                      f" and `max_sweep_value`.")
+
+            ## The sweep parameters can either be >1 (up to inf for now) or
+            ## between 0 and 1.  In the former case, the values are interpreted
+            ## as real hyperparameter values (providing [10, 20] means that
+            ## a `perplexity`/`n_neighbors` of 10 and 20 will be set). The
+            ## latter case will be interpreted to set the hyperparameters as a
+            ## fraction of the number of samples in the data.  We don't want
+            ## to mix these cases, so we insist the array is completely in
+            ## [0, 1] or [1, inf].
+            if np.any(tmp < 0):
+                err_str = f"Hyperparameter values must be > 0."
+                raise ValueError(err_str)
+            if np.all(tmp < 1):
+                if self.verbose >= 3:
+                    print(f"Hyperparameter values specified as fractions of"
+                          f" the number of samples!")
+            elif np.all(tmp > 1):
+                if self.verbose >= 3:
+                    print(f"Hyperparameter values specified absolutely!")
+            else:
+                err_str = f"Hyperparameter values must be specified absolutely"
+                err_str += f" (values > 1) or as fractions of the sample size"
+                err_str += f" (values < 1)."
+                raise ValueError(err_str)
+
+            ## Copy the values and squeeze the array.
+            self.sweep_values = tmp.squeeze()[:]
+            ## Make sure it's a 2D array, where the rows correspond to sweeps.
+            if self.sweep_values.ndim == 1:
+                self.sweep_values = self.sweep_values.reshape(-1, 1)
+
+            ## Set these based on the array.
+            self.n_sweep_values = len(self.sweep_values)
+            self.min_sweep_value = np.min(self.sweep_values)
+            self.max_sweep_value = np.max(self.sweep_values)
+
+        ## ... If an array is not supplied, check the values of other inputs.
+        else:
+            self.sweep_values = None
+
+            ## The number of sweeps must be at least 1!
+            n_sweep_values = int(n_sweep_values)
+            err_str  = f"Number of hyperparameter values in sweep must be > 1!"
+            assert n_sweep_values >= 1, err_str
+            self.n_sweep_values = n_sweep_values
+
+            ## The minimum hyperparameter value must be greater than 0.
+            min_sweep_value = float(min_sweep_value)
+            err_str  = f"Minimum hyperparameter value must be > 0!"
+            assert min_sweep_value > 0, err_str
+            self.min_sweep_value = min_sweep_value
+
+            ## The maximum hyperparameter value must be greater than 0.
+            max_sweep_value = float(max_sweep_value)
+            err_str  = f"Maximum hyperparameter value must be > 0!"
+            assert max_sweep_value > 0, err_str
+            self.max_sweep_value = max_sweep_value
+
+        if self.verbose >= 1:
+            print(f"\nSweeping over {self.n_sweep_values} values of the"
+                  f" '{self.sweep_type}' parameter!")
+
+        ## kNN graph parameters
+        self.kNN_metric = kNN_metric
+        self.kNN_alg = kNN_alg.lower()
+        self.kNN_params = kNN_params
+
+        ## Affinity matrix parameters
+        self.aff_type = aff_type.lower()
+        self.aff_params = aff_params
+
+        ## Dimensionality reduction parameters
+        self.n_components = int(n_components)
+        self.DRA = DRA.lower()
+        self.DRA_params = DRA_params
+
+        ## Embedding statistic parameters
+        self.EES_type = EES_type.lower()
+        self.EES_params = EES_params
+        self.pVal_type = pVal_type.lower()
+
+        ## Runtime parameters
+        err_str = "Number of data embeddings must be > 0."
+        assert int(n_data_embed) > 0, err_str
+        self.n_data_embed = int(n_data_embed)
+
+        err_str = "Number of null embeddings must be >= 0."
+        assert int(n_null_embed) >= 0, err_str
+        self.n_null_embed = int(n_null_embed)
+
+        self.n_jobs = int(n_jobs)
+        self.rs = check_random_state(random_state)
+        self._seed = self.rs.get_state()[1][0]
+
+        ## File I/O parameters
+        self.do_cache = bool(do_cache)
+        self.project_name = project_name
+        if self.do_cache:
+            if path.isdir(project_dir):
+                self.project_dir = project_dir
+            else:
+                err_str  = f"Couldn't find project directory `{project_dir}`."
+                err_str += f" Please make sure this is a valid directory or"
+                err_str += f" turn off file caching (set `do_cache=False`)."
+                raise OSError(err_str)
+
+            if not path.isdir(path.join(project_dir, project_name)):
+                if self.verbose >= 5:
+                    print(f"Creating project directory "
+                          f"{path.join(project_dir, project_name)}")
+                os.mkdir(path.join(project_dir, project_name))
+        else:
+            if self.verbose >= 0:
+                warn_str  = f"\nWARNING: caching has been set to `False`. It"
+                warn_str += f" is strongly recommended that file caching be"
+                warn_str += f" used (`do_cache=True`) to save on time/memory!"
+                print(warn_str)
         return
+
+    def fit(self, X):
+
+        ## Check that the data is a 2D array
+        self.data_X = check_array(X, accept_sparse=True, ensure_2d=True)
+        ## If the data aren't sparse but could be, sparcify!
+        if not sp.issparse(self.data_X) and (np.mean(self.data_X == 0) > 0.1):
+            self.data_X = sp.csr_matrix(self.data_X)
+
+        ## Get the data shape
+        self.n_samples, self.n_features = self.data_X.shape
+
+        if self.verbose >= 1:
+            print(f"\nFitting '{self.sweep_type}' sweep!")
+
+        ## Check hyperparameter values.
+        self._check_hyperparameters()
+
+        self.embeddings = self.pValues = {}
+        self.data_EES = self.null_EES = {}
+
+        ## Loop over the values of the hyperparameters!
+        for ii, hp in enumerate(self.sweep_values):
+            if self.verbose >= 1:
+                print(f"\nFitting data with '{self.sweep_type}' = {hp}"
+                      f" ({ii + 1} / {self.n_sweep_values})")
+
+            perp = None
+            knn = None
+            if self.sweep_type == 'perplexity':
+                perp = hp
+            else:
+                knn = hp
+            embObj = EMBEDR(perplexity=perp,
+                            n_neighbors=knn,
+                            kNN_metric=self.kNN_metric,
+                            kNN_alg=self.kNN_alg,
+                            kNN_params=self.kNN_params,
+                            aff_type=self.aff_type,
+                            aff_params=self.aff_params,
+                            n_components=self.n_components,
+                            DRA=self.DRA,
+                            DRA_params=self.DRA_params,
+                            EES_type=self.EES_type,
+                            EES_params=self.EES_params,
+                            pVal_type=self.pVal_type,
+                            n_data_embed=self.n_data_embed,
+                            n_null_embed=self.n_null_embed,
+                            n_jobs=self.n_jobs,
+                            random_state=self.rs,
+                            verbose=self.verbose,
+                            do_cache=self.do_cache,
+                            project_name=self.project_name,
+                            project_dir=self.project_dir)
+
+            embObj.fit(self.data_X)
+
+            self.embeddings[hp] = embObj.data_Y.copy()
+            self.data_EES[hp]   = embObj.data_EES.copy()
+            self.null_EES[hp]   = embObj.null_EES.copy()
+            self.pValues[hp]    = embObj.pValues.copy()
+
+        return
+
+    def _check_hyperparameters(self):
+
+        ## If values for the sweep weren't provided, generate an array based on
+        ## the min/max and n_sweep parameters.
+        if self.sweep_values is None:
+
+            if self.verbose >= 3:
+                print(f"No sweep values provided, generating array"
+                      f" automatically!")
+
+            ## If the minimum sweep value is < 1, interpret it relative to
+            ## the number of samples.
+            if self.min_sweep_value < 1:
+
+                ## Floats are ok for `perplexity`
+                if self.sweep_type == 'perplexity':
+                    min_val = float(self.n_samples * self.min_sweep_value)
+                ## `n_neighbors` must be an integer.
+                elif self.sweep_type == 'n_neighbors':
+                    min_val = int(self.n_samples * self.min_sweep_value)
+                    min_val = np.max([1, min_val])
+
+            ## Check that the minimum sweep value is < `n_samples`.
+            elif self.min_sweep_value > self.n_samples:
+                warn_str  = f"Warning: `min_sweep_value`="
+                warn_str += f"{self.min_sweep_value} is larger than"
+                warn_str += f" `n_samples`={self.n_samples}. Clipping"
+                warn_str += f" values to be in [1, {self.n_samples}."
+
+                min_val = self.n_samples
+                print(warn_str)
+
+            else:
+                min_val = self.min_sweep_value
+
+            if self.verbose >= 5:
+                print(f"Min sweep value is {self.min_sweep_value}, which"
+                      f" corresponds to '{self.sweep_type}' = {min_val}.")
+
+            ## If the maximum sweep value is < 1, interpret it relative to
+            ## the number of samples.
+            if self.max_sweep_value < 1:
+                if self.sweep_type == 'perplexity':
+                    max_val = float(self.n_samples * self.max_sweep_value)
+                elif self.sweep_type == 'n_neighbors':
+                    max_val = int(self.n_samples * self.max_sweep_value)
+                    max_val = np.max([1, max_val])
+
+            ## Check that the maximum sweep value is < `n_samples`.
+            elif self.max_sweep_value > self.n_samples:
+                warn_str  = f"Warning: `max_sweep_value`="
+                warn_str += f"{self.max_sweep_value} is larger than"
+                warn_str += f" `n_samples`={self.n_samples}. Clipping"
+                warn_str += f" values to be in [1, {self.n_samples}."
+
+                max_val = self.n_samples
+                print(warn_str)
+
+            else:
+                max_val = self.max_sweep_value
+
+            if self.verbose >= 5:
+                print(f"Max sweep value is {self.max_sweep_value}, which"
+                      f" corresponds to '{self.sweep_type}' = {max_val}.")
+
+            if min_val > max_val:
+                err_str =  f"Invalid values for `min_sweep_value` and"
+                err_str += f" `max_sweep_value`... Minimum value must be less"
+                err_str += f" than the maximum value, not {min_val}>{max_val}."
+                raise ValueError(err_str)
+
+            out = np.logspace(np.log10(min_val), np.log10(max_val),
+                              self.n_sweep_values)[::-1]
+
+        ## If values for the sweep *were* provided, we need to make sure they
+        ## are legal with the size of the data.
+        else:
+            ## If the sweep values are provided as relative values...
+            if np.all(self.sweep_values < 1):
+                if self.verbose >= 3:
+                    print(f"All hyperparameter values provided as fractions"
+                          f" of the number of samples!")
+                out = np.clip(self.n_samples * self.sweep_values, 1,
+                              self.n_samples)
+
+            ## If the sweep values are provided as absolute values...
+            elif np.all(self.sweep_values >= 1):
+                if self.verbose >= 3:
+                    print(f"All hyperparameter values provided absolutely!")
+                out = np.clip(self.sweep_values, 1, self.n_samples)
+
+            else:
+                raise ValueError(f"Cannot mix relative and absolute"
+                                 f" specification of `sweep_values`.")
+
+        out = np.round(out, 2)
+
+        if self.sweep_type == 'n_neighbors':
+            out = out.astype(int)
+
+        self.sweep_values = np.sort(np.unique(out)).squeeze()[::-1]
+
+        if len(self.sweep_values) < self.n_sweep_values:
+
+            if self.verbose >= 3:
+                print(f"Warning: after removing duplicate values, the number"
+                      f" of hyperparameter values in the sweep is "
+                      f"{len(self.sweep_values)} (not {self.n_sweep_values}).")
+
+            self.n_sweep_values = len(self.sweep_values)
+
+        if self.verbose >= 5:
+            print(f"Hyperparameter array has been set as:")
+            print(self.sweep_values)
+
 
