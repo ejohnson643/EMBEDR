@@ -1656,12 +1656,12 @@ class EMBEDR_sweep(object):
 
         pVal_arr = np.asarray([self.pValues[hp] for hp in self.sweep_values])
 
-        opt_hp_idx = np.argmin(pVal_arr, axis=0)
+        opt_hp_idx = np.argmin(pVal_arr[::-1], axis=0)
 
         if self.verbose >= 2:
             print(f"Returning optimal '{self.sweep_type}' values!")
 
-        return self.sweep_values[opt_hp_idx].squeeze()
+        return self.sweep_values[::-1][opt_hp_idx].squeeze()
 
     def fit_samplewise_optimal(self):
 
@@ -1701,6 +1701,7 @@ class EMBEDR_sweep(object):
 
         optObj.fit(self.data_X)
 
+        self.opt_obj = optObj
         self.opt_embed    = optObj.data_Y[:]
         self.opt_data_EES = optObj.data_EES[:]
         self.opt_null_EES = optObj.null_EES[:]

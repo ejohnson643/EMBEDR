@@ -233,8 +233,9 @@ class FixedEntropyAffinity(AffinityMatrix):
 
             perp_arr = np.clip(perp_arr, 1, self.n_samples)
 
-        self._perp_arr = perp_arr[:]
-        return perp_arr.max()
+        if not hasattr(self, '_perp_arr'):
+            self._perp_arr = perp_arr[:]
+        return self._perp_arr.max()
 
     def _check_X(self, X):
         if isinstance(X, nn.kNNIndex):
@@ -380,9 +381,6 @@ def _initialize_affinity_matrix(X,
                         **kwargs)
 
     kNN_index = aff_obj._check_X(X)
-
-    if aff_type == 'fixed_entropy_gauss':
-        aff_obj.perplexity = aff_obj._check_perplexity(aff_obj.perplexity)
 
     return aff_obj, kNN_index
 
