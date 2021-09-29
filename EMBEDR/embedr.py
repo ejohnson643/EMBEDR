@@ -883,7 +883,12 @@ class EMBEDR(object):
             tmp_embed_arr[ii] = tmp_embed.embedding[:]
 
         ## Calculate the EES
-        tmp_EES = self.calculate_EES(P.P, tmp_embed_arr)
+        if self.data_P.normalization != 'local':
+            tmp_aff = self._get_affinity_matrix(self.data_kNN,
+                                                null_fit=null_fit)
+            tmp_EES = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
+        else:
+            tmp_EES = self.calculate_EES(P.P, tmp_embed_arr)
 
         if n_embeds_made > 0:
             tmp_embed_arr = np.vstack((tmp_Y, tmp_embed_arr))
