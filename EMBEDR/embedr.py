@@ -60,6 +60,8 @@ class EMBEDR(object):
         ## Affinity matrix parameters
         self.aff_type = aff_type.lower()
         self.aff_params = aff_params
+        if aff_params is None:
+            self.aff_params = {}
 
         ## Dimensionality reduction parameters
         self.n_components = int(n_components)
@@ -884,8 +886,13 @@ class EMBEDR(object):
 
         ## Calculate the EES
         if self.data_P.normalization != 'local':
+            old_aff_params = {}
+            if self.aff_params is not None:
+                old_aff_params = self.aff_params.copy()
+            self.aff_params.update({"normalization": 'local'})
             tmp_aff = self._get_affinity_matrix(self.data_kNN,
                                                 null_fit=null_fit)
+            self.aff_params = old_aff_params.copy()
             tmp_EES = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
         else:
             tmp_EES = self.calculate_EES(P.P, tmp_embed_arr)
@@ -1072,7 +1079,10 @@ class EMBEDR(object):
         else:
             tmpY = Y
 
-        DKL = ees.calculate_DKL(P.indices, P.indptr, P.data, tmpY)
+        P_rowsums = np.asarray(P.sum(axis=1))
+        tmp_P = sp.csr_matrix(P / P_rowsums)
+
+        DKL = ees.calculate_DKL(tmp_P.indices, tmp_P.indptr, tmp_P.data, tmpY)
 
         if np.any(DKL < 0) and (self.verbose > 0):
             print("WARNING: Illegal values detected for DKL!")
