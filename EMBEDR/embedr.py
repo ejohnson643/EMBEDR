@@ -59,9 +59,7 @@ class EMBEDR(object):
 
         ## Affinity matrix parameters
         self.aff_type = aff_type.lower()
-        self.aff_params = aff_params
-        if aff_params is None:
-            self.aff_params = {}
+        self.aff_params = aff_params.copy()
 
         ## Dimensionality reduction parameters
         self.n_components = int(n_components)
@@ -114,6 +112,24 @@ class EMBEDR(object):
         out_str = ""
         if self.verbose > 0:
             out_str += f"\n\n\tEMBEDR Class v{ev}\n" + 35 * "=" + "\n\n"
+
+        if self.verbose > 1:
+            if self.do_cache:
+                out_str += f"\tIntermediate results for the"
+                out_str += f" {self.project_name} project will be cached in"
+                out_str += f" {self.project_dir}!"
+            else:
+                out_str += f"\tIntermediate results for the"
+                out_str += f" {self.project_name} project will not be cached!"
+
+        if self.verbose > 2:
+            out_str += f"\n\tkNN algorithm is {self.kNN_alg}"
+            out_str += f"\n\tAffinity type is {self.aff_type}"
+            out_str += f"\n\tDim.Red. Algorithm is {self.DRA}"
+            out_str += f"\n\tn_components = {self.n_components}"
+            out_str += f"\n\tn_data_embed = {self.n_data_embed}"
+            out_str += f"\n\tn_null_embed = {self.n_null_embed}"
+
         return out_str
 
     def fit(self, X):
@@ -614,6 +630,8 @@ class EMBEDR(object):
                         out.P = out.calculate_affinities(self.data_kNN,
                                                          recalc=True)
 
+                    print(f"After loading, norm was {out.normalization}")
+
                     if self.verbose >= 3:
                         print(f"Affinity matrix successfully loaded!")
 
@@ -896,6 +914,8 @@ class EMBEDR(object):
             tmp_EES = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
         else:
             tmp_EES = self.calculate_EES(P.P, tmp_embed_arr)
+
+        print(self.aff_params)
 
         if n_embeds_made > 0:
             tmp_embed_arr = np.vstack((tmp_Y, tmp_embed_arr))
