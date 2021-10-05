@@ -497,7 +497,7 @@ class tSNE_Embed:
         qtree = QuadTree(self.embedding)
 
         ## Calculate the negative gradient
-        sum_Q = _tsne.estimate_negative_gradient_bh(
+        sum_Qi = _tsne.estimate_negative_gradient_bh(
             qtree,
             self.embedding,
             self._gradient,
@@ -506,6 +506,10 @@ class tSNE_Embed:
             num_threads=self.n_jobs,
             pairwise_normalization=pairwise_normalization,
         )
+        sum_Q = np.sum(sum_Qi)
+
+        # print(sum_Qi[:])
+        # print(sum_Q)
 
         ## Delete the quadtree
         del qtree

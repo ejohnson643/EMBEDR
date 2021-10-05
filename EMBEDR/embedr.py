@@ -55,7 +55,7 @@ class EMBEDR(object):
         ## kNN graph parameters
         self.kNN_metric = kNN_metric
         self.kNN_alg = kNN_alg.lower()
-        self.kNN_params = kNN_params
+        self.kNN_params = kNN_params.copy()
 
         ## Affinity matrix parameters
         self.aff_type = aff_type.lower()
@@ -64,11 +64,11 @@ class EMBEDR(object):
         ## Dimensionality reduction parameters
         self.n_components = int(n_components)
         self.DRA = DRA.lower()
-        self.DRA_params = DRA_params
+        self.DRA_params = DRA_params.copy()
 
         ## Embedding statistic parameters
         self.EES_type = EES_type.lower()
-        self.EES_params = EES_params
+        self.EES_params = EES_params.copy()
         self.pVal_type = pVal_type.lower()
 
         ## Runtime parameters
@@ -915,8 +915,6 @@ class EMBEDR(object):
         else:
             tmp_EES = self.calculate_EES(P.P, tmp_embed_arr)
 
-        print(self.aff_params)
-
         if n_embeds_made > 0:
             tmp_embed_arr = np.vstack((tmp_Y, tmp_embed_arr))
 
@@ -1351,6 +1349,7 @@ class EMBEDR_sweep(object):
                  EES_type="dkl",
                  EES_params={},
                  pVal_type="average",
+                 use_min_EES_as_opt=True,
                  # Runtime parameters
                  n_data_embed=1,
                  n_null_embed=1,
@@ -1471,6 +1470,8 @@ class EMBEDR_sweep(object):
         self.EES_params = EES_params
         self.pVal_type = pVal_type.lower()
 
+        self._use_min_EES = bool(use_min_EES_as_opt)
+
         ## Runtime parameters
         err_str = "Number of data embeddings must be > 0."
         assert int(n_data_embed) > 0, err_str
@@ -1526,8 +1527,10 @@ class EMBEDR_sweep(object):
         ## Check hyperparameter values.
         self._check_hyperparameters()
 
-        self.embeddings = self.pValues = {}
-        self.data_EES = self.null_EES = {}
+        self.embeddings = {}
+        self.pValues    = {}
+        self.data_EES   = {}
+        self.null_EES   = {}
 
         ## Loop over the values of the hyperparameters!
         for ii, hp in enumerate(self.sweep_values):
@@ -1691,12 +1694,30 @@ class EMBEDR_sweep(object):
 
         pVal_arr = np.asarray([self.pValues[hp] for hp in self.sweep_values])
 
-        opt_hp_idx = np.argmin(pVal_arr[::-1], axis=0)
+        if self._use_min_EES:
+            dEES_arr = np.asarray([self.data_EES[hp].min(axis=0)
+                                   for hp in self.sweep_values])
+
+            opt_sweep_values = np.zeros((self.n_samples))
+
+            for ii in range(self.n_samples):
+                pVal_row = pVal_arr[:, ii]
+                min_pVal_idx = (pVal_row == pVal_row.min()).nonzero()[0]
+                min_pVal_EES = dEES_arr[min_pVal_idx, ii]
+
+                min_pVal_EES_idx = min_pVal_EES.argmin()
+                opt_val = self.sweep_values[min_pVal_idx[min_pVal_EES_idx]]
+
+                opt_sweep_values[ii] = opt_val
+
+        else:
+            opt_hp_idx = np.argmin(pVal_arr[::-1], axis=0)
+            opt_sweep_values = self.sweep_values[::-1][opt_hp_idx].squeeze()
 
         if self.verbose >= 2:
             print(f"Returning optimal '{self.sweep_type}' values!")
 
-        return self.sweep_values[::-1][opt_hp_idx].squeeze()
+        return opt_sweep_values
 
     def fit_samplewise_optimal(self):
 
@@ -1736,8 +1757,10 @@ class EMBEDR_sweep(object):
 
         optObj.fit(self.data_X)
 
-        self.opt_obj = optObj
-        self.opt_embed    = optObj.data_Y[:]
-        self.opt_data_EES = optObj.data_EES[:]
-        self.opt_null_EES = optObj.null_EES[:]
-        self.opt_pValues  = optObj.pValues[:]
+
+
+        self.opt_obj            = optObj
+        self.opt_embed          = optObj.data_Y[:]
+        self.opt_embed_data_EES = optObj.data_EES[:]
+        self.opt_embed_null_EES = optObj.null_EES[:]
+        self.opt_embed_pValues  = optObj.pValues[:]

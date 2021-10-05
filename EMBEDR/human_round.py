@@ -1,7 +1,8 @@
-
 ###############################################################################
 ##  Functions for Loading or and Calculating the Effective Nearest Neighbors
 ###############################################################################
+
+import numpy as np
 
 def is_iterable(x):
     """Check if a variable is iterable"""
