@@ -13,6 +13,7 @@ import os
 from os import path
 import pickle as pkl
 import scipy.sparse as sp
+import scipy.stats as st
 from sklearn.utils import check_array, check_random_state
 
 
@@ -270,6 +271,10 @@ class EMBEDR(object):
         self._max_nn = int(self._nn_arr.max())
 
     def get_hash(self):
+
+        ## If we already have a hash then skip this step...
+        if hasattr(self, 'hash'):
+            return self.hash
 
         # Hash should depend on data, (size) and random state.
 
@@ -630,8 +635,6 @@ class EMBEDR(object):
                         out.P = out.calculate_affinities(self.data_kNN,
                                                          recalc=True)
 
-                    print(f"After loading, norm was {out.normalization}")
-
                     if self.verbose >= 3:
                         print(f"Affinity matrix successfully loaded!")
 
@@ -862,7 +865,8 @@ class EMBEDR(object):
                         tmp_Y, tmp_EES = pkl.load(f)
 
                     ## Load up to the requested number of embeddings!
-                    tmp_Y = tmp_Y[:n_embeds_reqd]
+                    tmp_Y   = tmp_Y[:n_embeds_reqd]
+                    tmp_EES = tmp_EES[:n_embeds_reqd]
 
                     ## Check that there are the required number of embeddings
                     n_embeds_made = tmp_Y.shape[0]
@@ -911,16 +915,20 @@ class EMBEDR(object):
             tmp_aff = self._get_affinity_matrix(self.data_kNN,
                                                 null_fit=null_fit)
             self.aff_params = old_aff_params.copy()
-            tmp_EES = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
+            tmp_EES_arr = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
         else:
-            tmp_EES = self.calculate_EES(P.P, tmp_embed_arr)
+            tmp_EES_arr = self.calculate_EES(P.P, tmp_embed_arr)
 
         if n_embeds_made > 0:
-            tmp_embed_arr = np.vstack((tmp_Y, tmp_embed_arr))
+            tmp_Y   = np.vstack((tmp_Y, tmp_embed_arr))
+            tmp_EES = np.vstack((tmp_EES, tmp_EES_arr))
+        else:
+            tmp_Y = tmp_embed_arr.copy()
+            tmp_EES = tmp_EES_arr.copy()
 
         if self.verbose >= 4:
-            print(f"Checking that the `tmp_embed_arr` has size"
-                  f"{tmp_embed_arr.shape}")
+            print(f"Checking that the `tmp_Y` has size {tmp_Y.shape}")
+            print(f"Checking that the `tmp_EES` has size {tmp_EES.shape}")
 
         ## Then if we re caching files, we need to save these embeddings!
         if self.do_cache:
@@ -946,7 +954,7 @@ class EMBEDR(object):
                     print(f"Appending to cache {dra_name}!")
 
             with open(dra_path, 'wb') as f:
-                pkl.dump([tmp_embed_arr, tmp_EES], f)
+                pkl.dump([tmp_Y, tmp_EES], f)
 
             tmp_tSNE_params = self._get_matchable_tSNE_params(tmp_embed)
 
@@ -1299,6 +1307,7 @@ class EMBEDR(object):
 
         if show_cbar:
             cbar_ax = fig.colorbar(h_ax,
+                                   ax=ax,
                                    cax=cax,
                                    boundaries=color_bounds,
                                    ticks=[],
@@ -1349,7 +1358,7 @@ class EMBEDR_sweep(object):
                  EES_type="dkl",
                  EES_params={},
                  pVal_type="average",
-                 use_min_EES_as_opt=True,
+                 use_t_stat_for_opt=True,
                  # Runtime parameters
                  n_data_embed=1,
                  n_null_embed=1,
@@ -1470,7 +1479,7 @@ class EMBEDR_sweep(object):
         self.EES_params = EES_params
         self.pVal_type = pVal_type.lower()
 
-        self._use_min_EES = bool(use_min_EES_as_opt)
+        self._use_t_stat = bool(use_t_stat_for_opt)
 
         ## Runtime parameters
         err_str = "Number of data embeddings must be > 0."
@@ -1488,6 +1497,7 @@ class EMBEDR_sweep(object):
         ## File I/O parameters
         self.do_cache = bool(do_cache)
         self.project_name = project_name
+        self.project_dir = project_dir
         if self.do_cache:
             if path.isdir(project_dir):
                 self.project_dir = project_dir
@@ -1565,6 +1575,9 @@ class EMBEDR_sweep(object):
                             do_cache=self.do_cache,
                             project_name=self.project_name,
                             project_dir=self.project_dir)
+
+            if hasattr(self, 'hash'):
+                embObj.hash = self.hash
 
             embObj.fit(self.data_X)
 
@@ -1694,21 +1707,61 @@ class EMBEDR_sweep(object):
 
         pVal_arr = np.asarray([self.pValues[hp] for hp in self.sweep_values])
 
-        if self._use_min_EES:
-            dEES_arr = np.asarray([self.data_EES[hp].min(axis=0)
+        if self._use_t_stat:
+
+            print(f"USING T STAT!")
+
+            t_stats = np.zeros((self.n_sweep_values, self.n_samples))
+
+            all_dEES = np.asarray([self.data_EES[hp]
                                    for hp in self.sweep_values])
+            all_nEES = np.asarray([self.null_EES[hp]
+                                   for hp in self.sweep_values])
+            all_nEES = all_nEES.reshape(self.n_sweep_values, -1)
 
-            opt_sweep_values = np.zeros((self.n_samples))
+            dEES_means = all_dEES.mean(axis=1)
+            dEES_stds  = all_dEES.std(axis=1)
+            dEES_N     = self.n_data_embed
+            nEES_means = all_nEES.mean(axis=1)
+            nEES_stds  = all_nEES.std(axis=1)
+            nEES_N     = self.n_null_embed * self.n_samples
 
-            for ii in range(self.n_samples):
-                pVal_row = pVal_arr[:, ii]
-                min_pVal_idx = (pVal_row == pVal_row.min()).nonzero()[0]
-                min_pVal_EES = dEES_arr[min_pVal_idx, ii]
+            for ii in range(self.n_sweep_values):
+                t_res = st.ttest_ind_from_stats(dEES_means[ii],
+                                                dEES_stds[ii],
+                                                dEES_N,
+                                                nEES_means[ii],
+                                                nEES_stds[ii],
+                                                nEES_N,
+                                                equal_var=False)
+                t_stats[ii] = t_res.statistic
 
-                min_pVal_EES_idx = min_pVal_EES.argmin()
-                opt_val = self.sweep_values[min_pVal_idx[min_pVal_EES_idx]]
+                opt_sweep_values = np.zeros((self.n_samples))
 
-                opt_sweep_values[ii] = opt_val
+                for ii in range(self.n_samples):
+                    pVal_row = pVal_arr[:, ii]
+                    min_pVal_idx = (pVal_row == pVal_row.min()).nonzero()[0]
+                    min_pVal_t = t_stats[min_pVal_idx, ii]
+                    min_pVal_t_idx = min_pVal_t.argmin()
+                    opt_val = self.sweep_values[min_pVal_idx[min_pVal_t_idx]]
+
+                    opt_sweep_values[ii] = opt_val
+
+        # if self._use_min_EES:
+            # dEES_arr = np.asarray([np.median(self.data_EES[hp], axis=0)
+            #                        for hp in self.sweep_values])
+
+            # opt_sweep_values = np.zeros((self.n_samples))
+
+            # for ii in range(self.n_samples):
+            #     pVal_row = pVal_arr[:, ii]
+            #     min_pVal_idx = (pVal_row == pVal_row.min()).nonzero()[0]
+            #     min_pVal_EES = dEES_arr[min_pVal_idx, ii]
+
+            #     min_pVal_EES_idx = min_pVal_EES.argmin()
+            #     opt_val = self.sweep_values[min_pVal_idx[min_pVal_EES_idx]]
+
+            #     opt_sweep_values[ii] = opt_val
 
         else:
             opt_hp_idx = np.argmin(pVal_arr[::-1], axis=0)
