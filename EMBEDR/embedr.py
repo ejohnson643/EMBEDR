@@ -1566,6 +1566,9 @@ class EMBEDR_sweep(object):
                             project_name=self.project_name,
                             project_dir=self.project_dir)
 
+            if hasattr(self, 'hash'):
+                embObj.hash = self.hash
+
             embObj.fit(self.data_X)
 
             self.embeddings[hp] = embObj.data_Y.copy()
