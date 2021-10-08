@@ -1359,6 +1359,7 @@ class EMBEDR_sweep(object):
                  EES_params={},
                  pVal_type="average",
                  use_t_stat_for_opt=True,
+                 use_log_t_stat=False,
                  # Runtime parameters
                  n_data_embed=1,
                  n_null_embed=1,
@@ -1480,6 +1481,7 @@ class EMBEDR_sweep(object):
         self.pVal_type = pVal_type.lower()
 
         self._use_t_stat = bool(use_t_stat_for_opt)
+        self._log_t = bool(use_log_t_stat)
 
         ## Runtime parameters
         err_str = "Number of data embeddings must be > 0."
@@ -1709,7 +1711,11 @@ class EMBEDR_sweep(object):
 
         if self._use_t_stat:
 
-            print(f"USING T STAT!")
+            if self.verbose >= 3 and not self._log_t:
+                print(f"Setting optimal {self.sweep_type} using normal fits.")
+            elif self.verbose >= 3:
+                print(f"Setting optimal {self.sweep_type} using log-normal"
+                      f" fits.")
 
             t_stats = np.zeros((self.n_sweep_values, self.n_samples))
 
@@ -1719,6 +1725,10 @@ class EMBEDR_sweep(object):
                                    for hp in self.sweep_values])
             all_nEES = all_nEES.reshape(self.n_sweep_values, -1)
 
+            if self._log_t:
+                all_dEES = np.log(all_dEES)
+                all_nEES = np.log(all_nEES)
+
             dEES_means = all_dEES.mean(axis=1)
             dEES_stds  = all_dEES.std(axis=1)
             dEES_N     = self.n_data_embed
@@ -1726,26 +1736,30 @@ class EMBEDR_sweep(object):
             nEES_stds  = all_nEES.std(axis=1)
             nEES_N     = self.n_null_embed * self.n_samples
 
-            for ii in range(self.n_sweep_values):
-                t_res = st.ttest_ind_from_stats(dEES_means[ii],
-                                                dEES_stds[ii],
+            for hpNo in range(self.n_sweep_values):
+                t_res = st.ttest_ind_from_stats(dEES_means[hpNo],
+                                                dEES_stds[hpNo],
                                                 dEES_N,
-                                                nEES_means[ii],
-                                                nEES_stds[ii],
+                                                nEES_means[hpNo],
+                                                nEES_stds[hpNo],
                                                 nEES_N,
                                                 equal_var=False)
-                t_stats[ii] = t_res.statistic
+                t_stats[hpNo] = t_res.statistic
 
-                opt_sweep_values = np.zeros((self.n_samples))
+            opt_sweep_values = np.zeros((self.n_samples))
 
-                for ii in range(self.n_samples):
-                    pVal_row = pVal_arr[:, ii]
-                    min_pVal_idx = (pVal_row == pVal_row.min()).nonzero()[0]
-                    min_pVal_t = t_stats[min_pVal_idx, ii]
-                    min_pVal_t_idx = min_pVal_t.argmin()
-                    opt_val = self.sweep_values[min_pVal_idx[min_pVal_t_idx]]
-
-                    opt_sweep_values[ii] = opt_val
+            for ii in range(self.n_samples):
+                ## Get the p-values for sample ii at each hyperparam value
+                pVal_row = pVal_arr[:, ii]
+                ## Locate the minimal p-values
+                min_pVal_idx = (pVal_row == pVal_row.min()).nonzero()[0]
+                ## Locate the t-stats corresponding to those minimal p-values
+                min_pVal_t = t_stats[min_pVal_idx, ii]
+                ## Locate the minimal t-stat
+                min_pVal_t_idx = min_pVal_t.argmin()
+                ## Set the optimal hyperparam to be the min-t / min-hp value
+                opt_val = self.sweep_values[min_pVal_idx[min_pVal_t_idx]]
+                opt_sweep_values[ii] = opt_val
 
         # if self._use_min_EES:
             # dEES_arr = np.asarray([np.median(self.data_EES[hp], axis=0)
@@ -1764,10 +1778,13 @@ class EMBEDR_sweep(object):
             #     opt_sweep_values[ii] = opt_val
 
         else:
+            if self.verbose >= 3:
+                print(f"Setting optimal {self.sweep_type} using minimum.")
+
             opt_hp_idx = np.argmin(pVal_arr[::-1], axis=0)
             opt_sweep_values = self.sweep_values[::-1][opt_hp_idx].squeeze()
 
-        if self.verbose >= 2:
+        if self.verbose >= 5:
             print(f"Returning optimal '{self.sweep_type}' values!")
 
         return opt_sweep_values
