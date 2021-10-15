@@ -370,8 +370,8 @@ class EMBEDR(object):
                 print(f"WARNING: UMAP has not been implemented!")
                 # dY, dEES = self._get_UMAP_embedding(self.data_P, null_fit)
 
-            self.data_Y = dY[:]
-            self.data_EES = dEES[:]
+            self.data_Y = dY.copy()
+            self.data_EES = dEES.copy()
 
         else:
             ## Because each null will have its own kNN graph, we need to loop
@@ -404,14 +404,14 @@ class EMBEDR(object):
 
                 ## We then need to get the requested embeddings.
                 if (self.DRA in ['tsne', 't-sne']):
-                    nY, nEES = self._get_tSNE_embedding(nP, null_fit)
+                    nY, nEES = self._get_tSNE_embedding(nP, null_fit=nNo + 1)
 
                 elif (self.DRA in ['umap']):
                     print(f"WARNING: UMAP has not been implemented!")
                     # nY, nEES = self._get_UMAP_embedding(nP, null_fit)
 
-                self.null_Y[nNo] = nY
-                self.null_EES[nNo] = nEES
+                self.null_Y[nNo] = nY.copy()
+                self.null_EES[nNo] = nEES.copy()
 
                 self._null_seed += 100
 
@@ -426,7 +426,7 @@ class EMBEDR(object):
 
             ## Check if *any* kNN graphs have been made.
             if 'kNN' not in self.project_hdr:
-                if self.verbose >= 2:
+                if self.verbose >= 3:
                     print(f"No kNN graphs have been made yet for this data"
                           f" and/or seed.")
 
@@ -434,7 +434,6 @@ class EMBEDR(object):
 
             ## If kNN graphs have been fit...
             else:
-
                 if null_fit:
                     if self.verbose >= 3:
                         print(f"Looking for matching kNN graph in"
@@ -463,10 +462,15 @@ class EMBEDR(object):
                         print(f"kNN graph loaded!  Checking shape...")
 
                     if out.kNN_dst.shape[1] < self._max_nn:
-                        print(f"Not enough neighbors, querying for more!")
+                        if self.verbose >= 3:
+                            print(f"Not enough neighbors, querying for more!")
                         idx, dst = out.query(X, self._max_nn + 1)
                         out.kNN_dst = dst[:, 1:]
                         out.kNN_idx = idx[:, 1:]
+
+                    ## Always clip to the number of nearest neighbors required!
+                    out.kNN_dst = out.kNN_dst[:, :self.n_neighbors]
+                    out.kNN_idx = out.kNN_idx[:, :self.n_neighbors]
 
                     ## Return the loaded kNN graph.
                     return out
@@ -906,18 +910,28 @@ class EMBEDR(object):
 
             tmp_embed_arr[ii] = tmp_embed.embedding[:]
 
-        ## Calculate the EES
-        if self.data_P.normalization != 'local':
+        ## If the current affinity matrix is not locally normalized...
+        if P.normalization != 'local':
+            ## Make copy of current affinity parameters
             old_aff_params = {}
             if self.aff_params is not None:
                 old_aff_params = self.aff_params.copy()
+            ## Force current normalization to be 'local'
             self.aff_params.update({"normalization": 'local'})
-            tmp_aff = self._get_affinity_matrix(self.data_kNN,
-                                                null_fit=null_fit)
+            ## Get the current null iteration...
+            nNo = null_fit - 1
+            ## Get the correct kNN graph...
+            tmp_kNN = self.null_kNN[nNo] if null_fit else self.data_kNN
+            ## Load the correct affinity matrix...
+            tmp_aff = self._get_affinity_matrix(tmp_kNN, null_fit=null_fit)
+            ## Return the old affinity matrix parameters
             self.aff_params = old_aff_params.copy()
-            tmp_EES_arr = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
+        ## ... if it is locally normalized...
         else:
-            tmp_EES_arr = self.calculate_EES(P.P, tmp_embed_arr)
+            tmp_aff = P
+
+        ## Calculate the EES
+        tmp_EES_arr = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
 
         if n_embeds_made > 0:
             tmp_Y   = np.vstack((tmp_Y, tmp_embed_arr))
@@ -965,7 +979,7 @@ class EMBEDR(object):
             dra_hdr[dra_path] = dra_subhdr
             self.set_project_hdr(self.project_hdr)
 
-        return tmp_embed_arr, tmp_EES
+        return tmp_Y, tmp_EES
 
     def _initialize_tSNE_embed(self, P):
 

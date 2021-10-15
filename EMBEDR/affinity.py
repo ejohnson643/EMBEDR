@@ -200,7 +200,8 @@ class FixedEntropyAffinity(AffinityMatrix):
 
         def_kernel_params = dict(perp_tol=1.e-8, max_iter=200, tau_init=1,
                                  tau_min=-1, tau_max=-1)
-        self.kernel_params.update(def_kernel_params)
+        def_kernel_params.update(self.kernel_params)
+        self.kernel_params = def_kernel_params.copy()
 
         self.perplexity = perplexity
 
@@ -250,10 +251,13 @@ class FixedEntropyAffinity(AffinityMatrix):
 
             ## Set the number of nearest neighbors
             if self.n_neighbors is None:
+                ## If the number of neighbors is not specified, use 3*perp
                 self.n_neighbors = int(np.clip(3 * self.perplexity,
                                                1, self.n_samples - 1))
             else:
-                self.n_neighbors = np.clip(n_neighbors, 1, self.n_samples - 1)
+                ## Otherwise, check that n_neighbors is not too large.
+                self.n_neighbors = np.clip(self.n_neighbors, 1,
+                                           self.n_samples - 1)
 
         elif self.precomputed:
             if self.verbose >= 2:
