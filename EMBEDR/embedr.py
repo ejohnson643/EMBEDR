@@ -591,6 +591,7 @@ class EMBEDR(object):
 
         ## Initialize an affinity matrix based on the given parameters.
         tmp_aff = self._initialize_affinity_matrix(X)
+        comp_kernel_params = tmp_aff.kernel_params.copy()
 
         ## If we're doing file caching...
         if self.do_cache:
@@ -680,14 +681,14 @@ class EMBEDR(object):
 
             ## Get the kernel parameters and convert any arrays to lists.
             tmp_kernel_params = tmp_aff.kernel_params.copy()
-            for k in tmp_kernel_params:
+            for k in comp_kernel_params:
                 if isinstance(tmp_kernel_params[k], np.ndarray):
-                    tmp_kernel_params[k] = tmp_kernel_params[k].tolist()
+                    comp_kernel_params[k] = tmp_kernel_params[k].tolist()
 
             ## These are the parameters used to match affinity matrices
             aff_subhdr = dict(aff_type=tmp_aff.__class__.__name__,
                               n_neighbors=int(tmp_aff.n_neighbors),
-                              kernel_params=tmp_kernel_params,
+                              kernel_params=comp_kernel_params,
                               kNN_alg=X.__class__.__name__,
                               kNN_params=tmp_aff.kNN_params,
                               kNN_filename=X._filename,
