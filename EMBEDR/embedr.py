@@ -469,8 +469,8 @@ class EMBEDR(object):
                         out.kNN_idx = idx[:, 1:]
 
                     ## Always clip to the number of nearest neighbors required!
-                    out.kNN_dst = out.kNN_dst[:, :self.n_neighbors]
-                    out.kNN_idx = out.kNN_idx[:, :self.n_neighbors]
+                    out.kNN_dst = out.kNN_dst[:, :self._max_nn]
+                    out.kNN_idx = out.kNN_idx[:, :self._max_nn]
 
                     ## Return the loaded kNN graph.
                     return out
@@ -823,7 +823,7 @@ class EMBEDR(object):
         n_embeds_2_make = n_embeds_reqd
 
         ## Initialize an embedding using the input arguments.
-        tmp_Y = self._initialize_tSNE_embed(P)
+        tmp_tSNEObj = self._initialize_tSNE_embed(P)
 
         ## If we're doing file caching...
         if self.do_cache:
@@ -856,7 +856,7 @@ class EMBEDR(object):
                     dra_hdr = self.project_hdr['Embed_tSNE']['Data']
 
                 ## Look in the cache for a matching graph.
-                dra_path = self._match_tSNE_embeds(tmp_Y, P, dra_hdr)
+                dra_path = self._match_tSNE_embeds(tmp_tSNEObj, P, dra_hdr)
 
                 ## If a matching embedding exists...
                 if dra_path is not None:
