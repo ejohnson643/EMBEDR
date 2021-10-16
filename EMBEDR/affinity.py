@@ -82,7 +82,7 @@ class AffinityMatrix(object):
     def __init__(self,
                  kernel_params={},
                  symmetrize=True,
-                 normalization='local',
+                 normalization='global',
                  precomputed=False,
                  kNN_params={},
                  n_jobs=1,
@@ -187,7 +187,7 @@ class FixedEntropyAffinity(AffinityMatrix):
     def __init__(self,
                  kernel_params={},
                  symmetrize=True,
-                 normalization='local',
+                 normalization='global',
                  precomputed=False,
                  kNN_params={},
                  n_jobs=1,
@@ -339,10 +339,8 @@ class FixedEntropyAffinity(AffinityMatrix):
         if 'row_sums' in self.kernel_params:
             row_sums = self.kernel_params['row_sums']
 
-        k_NN = self.n_neighbors
-        return GaussianAff_fromPrec(kNNIndex.kNN_dst[:, :k_NN],
-                                    taus=taus,
-                                    row_sums=row_sums)
+        return GaussianAff_fromPrec(kNNIndex.kNN_dst[:, :self.n_neighbors],
+                                    taus=taus, row_sums=row_sums)
 
 
 valid_kernels = {'fixed_entropy_gauss': FixedEntropyAffinity}

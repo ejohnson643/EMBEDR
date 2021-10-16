@@ -636,8 +636,7 @@ class EMBEDR(object):
                         _ = out.P
                     ## If P wasn't saved, recalculate it!
                     except AttributeError:
-                        out.P = out.calculate_affinities(self.data_kNN,
-                                                         recalc=True)
+                        out.P = out.calculate_affinities(X, recalc=True)
 
                     if self.verbose >= 3:
                         print(f"Affinity matrix successfully loaded!")
