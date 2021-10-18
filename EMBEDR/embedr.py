@@ -42,6 +42,7 @@ class EMBEDR(object):
                  n_data_embed=1,
                  n_null_embed=1,
                  n_jobs=1,
+                 keep_affmats=False,
                  random_state=1,
                  verbose=1,
                  # File I/O parameters
@@ -85,6 +86,8 @@ class EMBEDR(object):
         self.rs = check_random_state(random_state)
         self._seed = self.rs.get_state()[1][0]
         self.verbose = float(verbose)
+
+        self._keep_affmats = bool(keep_affmats)
 
         ## File I/O parameters
         self.do_cache = bool(do_cache)
@@ -147,6 +150,11 @@ class EMBEDR(object):
 
         ## Get the data shape
         self.n_samples, self.n_features = self.data_X.shape
+
+        if (self.verbose >= 1) and self._keep_affmats:
+            if self.n_samples > 5000:
+                print(f"WARNING: Saving affinity matrices may result in"
+                      f" high memory usage!  (`keep_affmats` = True)")
 
         ## Get the object hash
         self.hash = self.get_hash()
@@ -370,6 +378,13 @@ class EMBEDR(object):
                 print(f"WARNING: UMAP has not been implemented!")
                 # dY, dEES = self._get_UMAP_embedding(self.data_P, null_fit)
 
+            if not self._keep_affmats:
+                if self.verbose >= 5:
+                    print(f"Deleting data affinity matrix! (Use `obj.data_P."
+                          f"calculate_affinities(obj.data_kNN, recalc=True)`"
+                          f" to recalculate.)")
+                del self.data_P.P
+
             self.data_Y = dY.copy()
             self.data_EES = dEES.copy()
 
@@ -409,6 +424,14 @@ class EMBEDR(object):
                 elif (self.DRA in ['umap']):
                     print(f"WARNING: UMAP has not been implemented!")
                     # nY, nEES = self._get_UMAP_embedding(nP, null_fit)
+
+                if not self._keep_affmats:
+                    if self.verbose >= 5:
+                        print(f"Deleting null affinity matrix! (Use `obj."
+                              f"null_P[{nNo}].calculate_affinities(obj."
+                              f"null_kNN[{nNo}], recalc=True)`"
+                              f" to recalculate.)")
+                    del self.null_P[nNo].P
 
                 self.null_Y[nNo] = nY.copy()
                 self.null_EES[nNo] = nEES.copy()
@@ -841,7 +864,6 @@ class EMBEDR(object):
 
             ## If embeddings have been made...
             else:
-
                 if null_fit:
                     if self.verbose >= 3:
                         print(f"Looking for matching t-SNE embeddings in"
