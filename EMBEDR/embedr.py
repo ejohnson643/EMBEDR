@@ -157,10 +157,10 @@ class EMBEDR(object):
                       f" high memory usage!  (`keep_affmats` = True)")
 
         ## Get the object hash
-        self.hash = self.get_hash()
+        self.hash = self._get_hash()
 
         ## Create project directory
-        self.project_hdr = self.get_project_hdr()
+        self.project_hdr = self._get_project_hdr()
 
         ## Set up n_neighbors and perplexity hyperparameters
         self._set_hyperparameters()
@@ -278,7 +278,7 @@ class EMBEDR(object):
         self._nn_arr = nn_arr[:]
         self._max_nn = int(self._nn_arr.max())
 
-    def get_hash(self):
+    def _get_hash(self):
 
         ## If we already have a hash then skip this step...
         if hasattr(self, 'hash'):
@@ -308,13 +308,17 @@ class EMBEDR(object):
             err_str += f" supported by EMBEDR at this time."
             raise TypeError(err_str)
 
+        ## Force float data types to be float64...
+        if data_chunk.dtype == 'float32':
+            data_chunk = data_chunk.astype('float64')
+
         # Add the data chunks that's been converted to bytes.
         hash_str += data_chunk.tobytes()
 
         # Digest the bytes into a hash!
         return hashlib.md5(hash_str).hexdigest()
 
-    def get_project_hdr(self):
+    def _get_project_hdr(self):
 
         # If we're not caching, then just skip everything.
         if not self.do_cache:
@@ -342,11 +346,11 @@ class EMBEDR(object):
             proj_hdr = {'project_name': self.project_name,
                         'project_path': self.project_path}
 
-            self.set_project_hdr(proj_hdr)
+            self._set_project_hdr(proj_hdr)
 
         return proj_hdr
 
-    def set_project_hdr(self, hdr):
+    def _set_project_hdr(self, hdr):
 
         if self.verbose >= 5:
             print(f"(Re-)Setting project header!")
@@ -363,7 +367,7 @@ class EMBEDR(object):
         if not null_fit:
 
             ## Basically, no matter what, we need the kNN graph
-            self.data_kNN = self._get_kNN_graph(self.data_X)
+            self.data_kNN = self.get_kNN_graph(self.data_X)
 
             ## If we're using t-SNE to embed or DKL as the EES, we need an
             ## affinity matrix.
@@ -409,7 +413,7 @@ class EMBEDR(object):
                 null_X = self.get_null(seed_offset=self._null_seed)
 
                 ## Generate a kNN graph
-                nKNN = self._get_kNN_graph(null_X, null_fit)
+                nKNN = self.get_kNN_graph(null_X, null_fit)
                 self.null_kNN[nNo] = nKNN
 
                 ## If we need an affinity matrix...
@@ -438,7 +442,7 @@ class EMBEDR(object):
 
                 self._null_seed += 100
 
-    def _get_kNN_graph(self, X, null_fit=False):
+    def get_kNN_graph(self, X, null_fit=False):
 
         ## First we initialize a kNN graph with the input parameters.
         seed = self._null_seed if null_fit else self._seed
@@ -544,7 +548,7 @@ class EMBEDR(object):
 
             ## Update the project header.
             kNN_hdr[kNN_path] = kNN_subhdr
-            self.set_project_hdr(self.project_hdr)
+            self._set_project_hdr(self.project_hdr)
 
         return tmp_kNN
 
@@ -571,10 +575,51 @@ class EMBEDR(object):
 
         return index
 
-    def _match_kNN_graph(self, tmp_kNN, kNN_hdr, seed):
-        kNN_path = None
+    def load_kNN_graph(self,
+                       X,
+                       kNNObj=None,
+                       seed=None,
+                       null_fit=False,
+                       raise_error=True):
 
-        for tmp_path, kNN_subhdr in kNN_hdr.items():
+        ## Set the seed if it is not provided.
+        if seed is None:
+            seed = self._null_seed if null_fit else self._seed
+
+        ## Initialize the kNN graph using the data and seed.
+        if kNNObj is None:
+            kNNObj = self._initialize_kNN_index(X, seed)
+
+        ## Check for the existence of loaded kNN graphs.
+        if 'kNN' not in self.project_hdr:
+
+            err_str  = f"Error loading kNN graph: no kNN graphs have yet been"
+            err_str += f" made for this data and/or seed!"
+
+            ## If we're running this independent of `fit`, then raise an error!
+            if raise_error:
+                raise FileNotFoundError(err_str)
+            ## Otherwise, warn that nothing could be loaded.
+            elif verbose >= 2:
+                print(err_str)
+
+            return  ## We can't get past here with this function!
+
+        ## Get the kNN header.
+        data_type = 'Null' if null_fit else 'Data'
+        if self.verbose >= 3:
+            print(f"Searching for matching kNN graph in {data_type} cache...")
+        kNN_hdr = self.project_hdr['kNN'][data_type]
+
+        ## Look in the cache for a matching graph.
+        kNN_path = self._match_kNN_graph(kNNObj, kNN_hdr, seed)
+
+    def _match_kNN_graph(self, kNNObj, kNN_hdr, seed):
+
+        kNN_path = None
+        for kNN_name, kNN_subhdr in kNN_hdr.items():
+
+            kNN_path = os.path.join()
 
             if self.verbose >= 5:
                 print(f"Checking kNN graph at {tmp_path}...")
@@ -660,6 +705,8 @@ class EMBEDR(object):
                         _ = out.P
                     ## If P wasn't saved, recalculate it!
                     except AttributeError:
+                        if self.verbose >= 3:
+                            print(f"Recalculating affinities...")
                         out.P = out.calculate_affinities(X, recalc=True)
 
                     if self.verbose >= 3:
@@ -723,7 +770,7 @@ class EMBEDR(object):
 
             ## Reset the project header json.
             aff_hdr[aff_path] = aff_subhdr
-            self.set_project_hdr(self.project_hdr)
+            self._set_project_hdr(self.project_hdr)
 
         return tmp_aff
 
@@ -838,7 +885,7 @@ class EMBEDR(object):
 
         return aff_path
 
-    def _get_tSNE_embedding(self, P, null_fit=False):
+    def _get_tSNE_embedding(self, affObj, null_fit=False):
 
         ## Get the number of requested embeddings
         n_embeds_made = 0
@@ -846,7 +893,7 @@ class EMBEDR(object):
         n_embeds_2_make = n_embeds_reqd
 
         ## Initialize an embedding using the input arguments.
-        tmp_tSNEObj = self._initialize_tSNE_embed(P)
+        tmp_tSNEObj = self._initialize_tSNE_embed(affObj)
 
         ## If we're doing file caching...
         if self.do_cache:
@@ -878,7 +925,8 @@ class EMBEDR(object):
                     dra_hdr = self.project_hdr['Embed_tSNE']['Data']
 
                 ## Look in the cache for a matching graph.
-                dra_path = self._match_tSNE_embeds(tmp_tSNEObj, P, dra_hdr)
+                dra_path = self._match_tSNE_embeds(tmp_tSNEObj,
+                                                   affObj, dra_hdr)
 
                 ## If a matching embedding exists...
                 if dra_path is not None:
@@ -912,6 +960,12 @@ class EMBEDR(object):
         tmp_embed_arr = np.zeros((n_embeds_2_make,
                                   self.n_samples,
                                   self.n_components))
+
+        ## Make sure that an affinity matrix is loaded...
+        # if not hasattr(affObj.P):
+        #     try:
+        #         affObj.calculate_affinities()
+
         for ii in range(n_embeds_2_make):
             if self.verbose >= 1:
                 print(f"\nFitting embedding {ii + 1}/{n_embeds_2_make}"
@@ -928,12 +982,12 @@ class EMBEDR(object):
                                    verbose=self.verbose,
                                    **self.DRA_params)
 
-            tmp_embed.fit(P)
+            tmp_embed.fit(affObj)
 
             tmp_embed_arr[ii] = tmp_embed.embedding[:]
 
         ## If the current affinity matrix is not locally normalized...
-        if P.normalization != 'local':
+        if affObj.normalization != 'local':
             ## Make copy of current affinity parameters
             old_aff_params = {}
             if self.aff_params is not None:
@@ -950,7 +1004,7 @@ class EMBEDR(object):
             self.aff_params = old_aff_params.copy()
         ## ... if it is locally normalized...
         else:
-            tmp_aff = P
+            tmp_aff = affObj
 
         ## Calculate the EES
         tmp_EES_arr = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
@@ -995,11 +1049,11 @@ class EMBEDR(object):
             tmp_tSNE_params = self._get_matchable_tSNE_params(tmp_embed)
 
             dra_subhdr = dict(DRA_params=tmp_tSNE_params,
-                              affmat_filename=P._filename)
+                              affmat_filename=affObj._filename)
 
             ## Reset the project header json.
             dra_hdr[dra_path] = dra_subhdr
-            self.set_project_hdr(self.project_hdr)
+            self._set_project_hdr(self.project_hdr)
 
         return tmp_Y, tmp_EES
 
