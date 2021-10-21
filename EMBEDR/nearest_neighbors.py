@@ -504,20 +504,28 @@ class Annoy(kNNIndex):
 
         self.__dict__.update(state)
 
-        if state['pickle_name'] and os.path.exists(state['pickle_name']):
-            if self.verbose > 2:
-                print(f"Loading Annoy index from {state['pickle_name']}")
+        if state['pickle_name']:
+            self._load_annoy_index(state['pickle_name'])
+        else:
+            warn_str =  f"Annoy index's file location was not saved. The index"
+            warn_str += f"will need to be rebuilt before querying the graph."
+
+    def _load_annoy_index(self, path):
+        if os.path.exists(path):
+            if self.verbose >= 3:
+                print(f"Loading Annoy index from {path}")
 
             self.index = self._initialize_ANNOY_index(self.n_features)
-
-            self.index.load(state['pickle_name'])
+            self.index.load(path)
 
         else:
-            warn_str =  f"Annoy index could not be found or loaded.  Index"
-            warn_str += f" will need to be rebuilt before querying the graph."
-            warnings.warn(warn_str)
+            warn_str =  f"Annoy index at {path} could not be found or loaded."
+            warn_str += f" Index will need to be rebuilt before querying"
+            warnings.warn(warn_str + " the graph.")
 
             self.index = None
+
+        return
 
 
 class NNDescent(kNNIndex):
@@ -835,6 +843,11 @@ def _initialize_kNN_index(X,
         preferred_approx_method = Annoy
     else:
         preferred_approx_method = NNDescent
+
+    ## If we've requested 'ANNOY' but the data are sparse, raise an error.
+    if sp.issparse(X) and (NN_alg.lower() == 'annoy'):
+        err_str = f"Incompatible kNN algorithm 'ANNOY' for sparse input data."
+        raise ValueError(err_str)
 
     ## If the data have fewer than 1000 samples, just use the exact method.
     if X.shape[0] < 1000:

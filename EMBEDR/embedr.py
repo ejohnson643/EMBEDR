@@ -1,5 +1,6 @@
 
 import EMBEDR.affinity as aff
+import EMBEDR.callbacks as cb
 import EMBEDR.ees as ees
 import EMBEDR.nearest_neighbors as nn
 from EMBEDR.tsne import tSNE_Embed
@@ -43,6 +44,7 @@ class EMBEDR(object):
                  n_data_embed=1,
                  n_null_embed=1,
                  n_jobs=1,
+                 allow_sparse=True,
                  keep_affmats=False,
                  random_state=1,
                  verbose=1,
@@ -88,6 +90,7 @@ class EMBEDR(object):
         self._seed = self.rs.get_state()[1][0]
         self.verbose = float(verbose)
 
+        self._allow_sparse = bool(allow_sparse)
         self._keep_affmats = bool(keep_affmats)
 
         ## File I/O parameters
@@ -164,9 +167,10 @@ class EMBEDR(object):
 
         ## Check that the data is a 2D array
         self.data_X = check_array(X, accept_sparse=True, ensure_2d=True)
-        ## If the data aren't sparse but could be, sparcify!
-        if not sp.issparse(self.data_X) and (np.mean(self.data_X == 0) > 0.1):
-            self.data_X = sp.csr_matrix(self.data_X)
+        ## If the data aren't sparse but could be, sparsify!
+        if self._allow_sparse and (not sp.issparse(self.data_X)):
+            if np.mean(self.data_X == 0) > 0.1:
+                self.data_X = sp.csr_matrix(self.data_X)
 
         ## Get the data shape
         self.n_samples, self.n_features = self.data_X.shape
@@ -390,11 +394,14 @@ class EMBEDR(object):
             ## If we're using t-SNE to embed or DKL as the EES, we need an
             ## affinity matrix.
             if (self.DRA in ['tsne', 't-sne']) or (self.EES_type == 'dkl'):
-                self.data_P = self.get_affinity_matrix(self.data_kNN)
+                self.data_P = self.get_affinity_matrix(X=self.data_X,
+                                                       kNN_graph=self.data_kNN)
 
             ## We then need to get the requested embeddings.
             if (self.DRA in ['tsne', 't-sne']):
-                dY, dEES = self.get_tSNE_embedding(self.data_P)
+                dY, dEES = self.get_tSNE_embedding(X=self.data_X,
+                                                   kNN_graph=self.data_kNN,
+                                                   aff_mat=self.data_P)
 
             elif (self.DRA in ['umap']):
                 print(f"WARNING: UMAP has not been implemented!")
@@ -431,17 +438,23 @@ class EMBEDR(object):
                 null_X = self.get_null(seed_offset=self._null_seed)
 
                 ## Generate a kNN graph
-                nKNN = self.get_kNN_graph(null_X, null_fit)
+                nKNN = self.get_kNN_graph(null_X,
+                                          null_fit=null_fit)
                 self.null_kNN[nNo] = nKNN
 
                 ## If we need an affinity matrix...
                 if (self.DRA in ['tsne', 't-sne']) or (self.EES_type == 'dkl'):
-                    nP = self.get_affinity_matrix(nKNN, null_fit)
+                    nP = self.get_affinity_matrix(null_X,
+                                                  kNN_graph=nKNN,
+                                                  null_fit=null_fit)
                     self.null_P[nNo] = nP
 
                 ## We then need to get the requested embeddings.
                 if (self.DRA in ['tsne', 't-sne']):
-                    nY, nEES = self.get_tSNE_embedding(nP, null_fit=nNo + 1)
+                    nY, nEES = self.get_tSNE_embedding(null_X,
+                                                       kNN_graph=nKNN,
+                                                       aff_mat=nP,
+                                                       null_fit=null_fit)
 
                 elif (self.DRA in ['umap']):
                     print(f"WARNING: UMAP has not been implemented!")
@@ -462,73 +475,21 @@ class EMBEDR(object):
 
     def get_kNN_graph(self, X, null_fit=False):
 
-        # ## First we initialize a kNN graph with the input parameters.
-        # seed = self._null_seed if null_fit else self._seed
-        # init_kNN = self._initialize_kNN_index(X, seed)
+        ## Initialize the kNN graph using the data and seed.
+        seed = self._null_seed if null_fit else self._seed
+        kNNObj = self._initialize_kNN_index(X, seed)
 
         ## If we're doing file caching, first we want to try and load the graph
         if self.do_cache:
+            loaded_kNN = self.load_kNN_graph(X,
+                                             kNNObj=kNNObj,
+                                             seed=seed,
+                                             null_fit=null_fit,
+                                             raise_error=False)
 
-            kNNObj = self.load_kNN_graph(X, null_fit=null_fit, 
-                                         raise_error=False)
-
-            if kNNObj is not None:
-                return kNNObj
-
-            # ## Check if *any* kNN graphs have been made.
-            # if 'kNN' not in self.project_hdr:
-            #     if self.verbose >= 3:
-            #         print(f"No kNN graphs have been made yet for this data"
-            #               f" and/or seed.")
-
-            #     self.project_hdr['kNN'] = dict(Data={}, Null={})
-
-            # ## If kNN graphs have been fit...
-            # else:
-            #     if null_fit:
-            #         if self.verbose >= 3:
-            #             print(f"Looking for matching kNN graph in"
-            #                   f" null cache.")
-
-            #         kNN_hdr = self.project_hdr['kNN']['Null']
-            #     else:
-            #         if self.verbose >= 3:
-            #             print(f"Looking for matching kNN graph in"
-            #                   f" data cache.")
-
-            #         kNN_hdr = self.project_hdr['kNN']['Data']
-
-            #     ## Look in the cache for a matching graph.
-            #     kNN_path = self._match_kNN_graph(tmp_kNN, kNN_hdr, seed)
-
-            #     # If a path has been found to a matching kNN graph load it!
-            #     if kNN_path is not None:
-            #         if self.verbose >= 3:
-            #             print(f"Attempting to load kNN graph...")
-
-            #         with open(kNN_path, 'rb') as f:
-            #             out = pkl.load(f)
-
-            #         if self.verbose >= 3:
-            #             print(f"kNN graph loaded!  Checking shape...")
-
-            #         if out.kNN_dst.shape[1] < self._max_nn:
-            #             if self.verbose >= 3:
-            #                 print(f"Not enough neighbors, querying for more!")
-            #             idx, dst = out.query(X, self._max_nn + 1)
-            #             out.kNN_dst = dst[:, 1:]
-            #             out.kNN_idx = idx[:, 1:]
-
-            #         ## Always clip to the number of nearest neighbors required!
-            #         out.kNN_dst = out.kNN_dst[:, :self._max_nn]
-            #         out.kNN_idx = out.kNN_idx[:, :self._max_nn]
-
-            #         ## Return the loaded kNN graph.
-            #         return out
-
-        ## First we initialize a kNN graph with the input parameters.
-        seed = self._null_seed if null_fit else self._seed
-        kNNObj = self._initialize_kNN_index(X, seed)
+            ## If we found a matching kNN graph, then we're done!
+            if loaded_kNN is not None:
+                return loaded_kNN
 
         ## If we're not caching, no kNNs have been made, or a matching kNN
         ## couldn't be found, then we need to fit a new one!
@@ -644,45 +605,63 @@ class EMBEDR(object):
         ## Look in the cache for a matching graph.
         kNN_path = self._match_kNN_graph(kNNObj, kNN_hdr, seed)
 
-        # If a path has been found to a matching kNN graph load it!
-        if kNN_path is not None:
+        ## If no matching graph is found then return None.
+        if kNN_path is None:
+            return None
+
+        if self.verbose >= 3:
+            print(f"Attempting to load kNN graph...")
+
+        ## If a path has been found to a matching kNN graph load it!
+        with open(kNN_path, 'rb') as f:
+            kNNObj = pkl.load(f)
+
+        ## If the kNN is an ANNOY object, try to load the ANNOY index using the
+        ## current project directory.
+        if isinstance(kNNObj, nn.Annoy):
+            if kNNObj.index is None:
+                ann_name = kNNObj.pickle_name.split("/")[-1]
+                ann_path = os.path.join(self.project_dir,
+                                        self.project_subdir,
+                                        ann_name)
+                kNNObj._load_annoy_index(ann_path)
+
+        ## Check that the requested number of neighbors are present.
+        if self.verbose >= 3:
+            print_str = f"kNN graph loaded!  Checking shape ... "
+
+        ## If there are too few neighbors, query for more.
+        if kNNObj.kNN_dst.shape[1] < self._max_nn:
             if self.verbose >= 3:
-                print(f"Attempting to load kNN graph...")
+                print_str += f"... not enough neighbors, querying for more!"
+                print(print_str)
 
-            with open(kNN_path, 'rb') as f:
-                out = pkl.load(f)
+            idx, dst = out.query(X, self._max_nn + 1)
+            kNNObj.kNN_dst = dst[:, 1:]
+            kNNObj.kNN_idx = idx[:, 1:]
 
-            ## Check that the requested number of neighbors are present.
+        ## If there are too many neighbors, report that information.
+        elif kNNObj.kNN_dst.shape[1] > self._max_nn:
             if self.verbose >= 3:
-                print(f"kNN graph loaded!  Checking shape...")
+                print(print_str + f"Too many neighbors, clipping kNN graph...")
 
-            if out.kNN_dst.shape[1] < self._max_nn:
-                if self.verbose >= 3:
-                    print(f"Not enough neighbors, querying for more!")
+        elif self.verbose >= 3:
+            print(print_str + f"... shape is correct!")
 
-                idx, dst = out.query(X, self._max_nn + 1)
-                out.kNN_dst = dst[:, 1:]
-                out.kNN_idx = idx[:, 1:]
+        ## Always clip to the number of nearest neighbors required!
+        kNNObj.kNN_dst = kNNObj.kNN_dst[:, :self._max_nn]
+        kNNObj.kNN_idx = kNNObj.kNN_idx[:, :self._max_nn]
 
-            elif out.kNN_dst.shape[1] > self._max_nn:
-                if self.verbose >= 3:
-                    print(f"Too many neighbors, clipping kNN graph...")
-
-            ## Always clip to the number of nearest neighbors required!
-            out.kNN_dst = out.kNN_dst[:, :self._max_nn]
-            out.kNN_idx = out.kNN_idx[:, :self._max_nn]
-
-            ## Return the loaded kNN graph.
-            return out
+        ## Return the loaded kNN graph.
+        return kNNObj
 
     def _match_kNN_graph(self, kNNObj, kNN_hdr, seed):
 
-        kNN_path = None
+        matching_kNN = None
         for kNN_name, kNN_subhdr in kNN_hdr.items():
-            tmp_path = os.path.join(self.project_dir, kNN_name)
 
             if self.verbose >= 5:
-                print(f"Checking kNN graph at {tmp_path}...")
+                print(f"Checking kNN graph {kNN_name}...")
 
             ## Check that the algorithm (subclass) matches
             if kNNObj.__class__.__name__ != kNN_subhdr['kNN_alg']:
@@ -710,91 +689,61 @@ class EMBEDR(object):
                 continue
 
             ## If all checks are passed, save the corresponding path!
-            if self.verbose >= 2:
-                print(f"kNN graph at {tmp_path} passed all checks!")
+            if self.verbose >= 3:
+                print(f"kNN graph at {kNN_name} passed all checks!")
 
-            kNN_path = tmp_path
+            matching_kNN = kNN_name
             break
 
-        return kNN_path
+        if matching_kNN is None:
+            return None
 
-    def get_affinity_matrix(self, X, null_fit=False):
+        ## In EMBEDR >v2.1 we want to be able to modify the project dir so that
+        ## it can be specified as a relative path. In previous versions the
+        ## header was keyed by a relative path at instantiation, which made it
+        ## impossible to load objects from different working dirs.
+        kNN_name = matching_kNN.split("/")[-1]
+        return os.path.join(self.project_dir, self.project_subdir, kNN_name)
 
-        ## Initialize an affinity matrix based on the given parameters.
-        tmp_aff = self._initialize_affinity_matrix(X)
-        comp_kernel_params = tmp_aff.kernel_params.copy()
+    def get_affinity_matrix(self, X, kNN_graph=None, null_fit=False):
+
+        ## Initialize affinity matrix object.
+        if kNN_graph is None:
+            kNN_graph = self.get_kNN_graph(X, null_fit=null_fit)
+        affObj = self._initialize_affinity_matrix(kNN_graph)[0]
+        init_kernel_params = affObj.kernel_params.copy()
 
         ## If we're doing file caching...
         if self.do_cache:
+            loaded_affObj = self.load_affinity_matrix(X,
+                                                      kNN_graph=kNN_graph,
+                                                      affObj=affObj,
+                                                      null_fit=null_fit,
+                                                      raise_error=False)
 
-            ## Check if *any* affinity matrices have been made...
-            if "affinity_matrix" not in self.project_hdr:
-                if self.verbose >= 2:
-                    print(f"No affinity matrices have been made yet for this"
-                          f" data and/or seed.")
-
-                self.project_hdr['affinity_matrix'] = dict(Data={}, Null={})
-
-            ## If affinity matrices have been cached...
-            else:
-
-                if null_fit:
-                    if self.verbose >= 3:
-                        print(f"\nLooking for matching affinity matrix in"
-                              f" null cache")
-
-                    aff_hdr = self.project_hdr['affinity_matrix']['Null']
-
-                else:
-                    if self.verbose >= 3:
-                        print(f"\nLooking for matching affinity matrix in"
-                              f" data cache")
-
-                    aff_hdr = self.project_hdr['affinity_matrix']['Data']
-
-                aff_path = self._match_affinity_matrix(tmp_aff, X, aff_hdr)
-
-                ## If a path has been found to a matching affinity matrix,
-                ## load it!
-                if aff_path is not None:
-                    if self.verbose >= 3:
-                        print(f"Attempting to load affinity matrix...")
-
-                    with open(aff_path, 'rb') as f:
-                        out = pkl.load(f)
-
-                    ## Check if the actual matrix, P, was saved...
-                    try:
-                        _ = out.P
-                    ## If P wasn't saved, recalculate it!
-                    except AttributeError:
-                        if self.verbose >= 3:
-                            print(f"Recalculating affinities...")
-                        out.P = out.calculate_affinities(X, recalc=True)
-
-                    if self.verbose >= 3:
-                        print(f"Affinity matrix successfully loaded!")
-
-                    return out
+            ## If we found a matching affinity matrix, then we're done!
+            if loaded_affObj is not None:
+                return loaded_affObj
 
         ## If we're not caching, no affinities have been made, or a matching
         ## affinity matrix couldn't be found, then we need to fit a new one!
-        tmp_aff.fit(X)
+        affObj.fit(kNN_graph)
 
         ## Finally, if we're caching, then add the fitted affinity matrix to
         ## the header and save the affinity matrix to the cache.
         if self.do_cache:
 
-            if null_fit:
-                aff_hdr = self.project_hdr['affinity_matrix']['Null']
-                n_aff_made = len(aff_hdr)
-                aff_name = f"Null_AffMat_{n_aff_made:04d}.aff"
-            else:
-                aff_hdr = self.project_hdr['affinity_matrix']['Data']
-                n_aff_made = len(aff_hdr)
-                aff_name = f"Data_AffMat_{n_aff_made:04d}.aff"
+            ## If there are no saved kNN's yet, make that field in the header.
+            if 'affinity_matrix' not in self.project_hdr:
+                self.project_hdr['affinity_matrix'] = dict(Data={}, Null={})
 
-            tmp_aff._filename = aff_name
+            ## Get the new file name.
+            data_type = 'Null' if null_fit else 'Data'
+            aff_hdr = self.project_hdr['affinity_matrix'][data_type]
+            n_aff_made = len(aff_hdr)
+            aff_name = f"{data_type}_AffMat_{n_aff_made:04d}.aff"
+
+            affObj._filename = aff_name
 
             if self.verbose >= 2:
                 print(f"Caching {aff_name} to file!")
@@ -802,40 +751,42 @@ class EMBEDR(object):
             ## To save space when caching, we don't save the calculated
             ## affinity matrix, P, but the info we need to quickly regenerate
             ## it instead.
-            P = tmp_aff.P.copy()
-            del tmp_aff.P
+            if hasattr(affObj, 'P'):
+                P = affObj.P.copy()
+                del affObj.P
 
             aff_path = path.join(self.project_path, aff_name)
             with open(aff_path, 'wb') as f:
-                pkl.dump(tmp_aff, f)
+                pkl.dump(affObj, f)
 
             ## Within the object however, we keep the matrix.
-            tmp_aff.P = P.copy()
+            affObj.P = P.copy()
 
             ## Get the kernel parameters and convert any arrays to lists.
-            tmp_kernel_params = tmp_aff.kernel_params.copy()
-            for k in comp_kernel_params:
-                if isinstance(tmp_kernel_params[k], np.ndarray):
-                    comp_kernel_params[k] = tmp_kernel_params[k].tolist()
+            fit_kernel_params = affObj.kernel_params.copy()
+            for k in init_kernel_params:
+                if isinstance(fit_kernel_params[k], np.ndarray):
+                    init_kernel_params[k] = fit_kernel_params[k].tolist()
 
             ## These are the parameters used to match affinity matrices
-            aff_subhdr = dict(aff_type=tmp_aff.__class__.__name__,
-                              n_neighbors=int(tmp_aff.n_neighbors),
-                              kernel_params=comp_kernel_params,
-                              kNN_alg=X.__class__.__name__,
-                              kNN_params=tmp_aff.kNN_params,
-                              kNN_filename=X._filename,
-                              normalization=tmp_aff.normalization,
-                              symmetrize=tmp_aff.symmetrize)
+            aff_subhdr = dict(aff_type=affObj.__class__.__name__,
+                              n_neighbors=int(affObj.n_neighbors),
+                              kernel_params=init_kernel_params,
+                              kNN_alg=kNN_graph.__class__.__name__,
+                              kNN_params=affObj.kNN_params,
+                              kNN_filename=kNN_graph._filename,
+                              normalization=affObj.normalization,
+                              symmetrize=affObj.symmetrize)
             ## Don't match perplexity if it isn't set.
             if self.perplexity is not None:
-                aff_subhdr['perp_arr'] = tmp_aff._perp_arr.tolist()
+                aff_subhdr['perp_arr'] = affObj._perp_arr.tolist()
 
-            ## Reset the project header json.
-            aff_hdr[aff_path] = aff_subhdr
+            ## Update the project header
+            aff_subpath = path.join(self.project_subdir, aff_name)
+            aff_hdr[aff_subpath] = aff_subhdr
             self._set_project_hdr(self.project_hdr)
 
-        return tmp_aff
+        return affObj
 
     def _initialize_affinity_matrix(self, X):
 
@@ -852,103 +803,171 @@ class EMBEDR(object):
         else:
             kernel_params = {}
 
-        out = aff._initialize_affinity_matrix(X,
-                                              aff_type=self.aff_type,
-                                              perplexity=self._perp_arr,
-                                              n_neighbors=self._max_nn,
-                                              kNN_params=kNN_params,
-                                              n_jobs=self.n_jobs,
-                                              random_state=self.rs,
-                                              verbose=self.verbose,
-                                              kernel_params=kernel_params,
-                                              **self.aff_params)
+        [affObj,
+         kNNObj] = aff._initialize_affinity_matrix(X,
+                                                   aff_type=self.aff_type,
+                                                   perplexity=self._perp_arr,
+                                                   n_neighbors=self._max_nn,
+                                                   kNN_params=kNN_params,
+                                                   n_jobs=self.n_jobs,
+                                                   random_state=self.rs,
+                                                   verbose=self.verbose,
+                                                   kernel_params=kernel_params,
+                                                   **self.aff_params)
 
-        # self.aff_params.update({'kernel_params': out.kernel_params})
+        return affObj, kNNObj
 
-        return out[0]
+    def load_affinity_matrix(self,
+                             X,
+                             kNN_graph=None,
+                             affObj=None,
+                             null_fit=False,
+                             raise_error=True):
 
-    def _match_affinity_matrix(self, tmp_aff, X, aff_hdr):
+        if kNN_graph is None:
+            kNN_graph = self.load_kNN_graph(X, null_fit=null_fit,
+                                            raise_error=raise_error)
+
+        if affObj is None:
+            affObj = self._initialize_affinity_matrix(kNN_graph)[0]
+
+        ## Check for the existence of loaded kNN graphs.
+        if "affinity_matrix" not in self.project_hdr:
+
+            err_str  = f"Error loading affinity matrix: no affinity matrices"
+            err_str += f" have yet been made for this data and/or seed!"
+
+            ## If we're running this independent of `fit`, then raise an error!
+            if raise_error:
+                raise FileNotFoundError(err_str)
+            ## Otherwise, warn that nothing could be loaded.
+            elif self.verbose >= 2:
+                print(err_str)
+
+            return  ## We can't get past here with this function!
+
+        ## Get the affinity matrix header.
+        data_type = 'Null' if null_fit else 'Data'
+        if self.verbose >= 3:
+            print(f"Searching for matching affinity matrix in {data_type}"
+                  " cache...")
+        aff_hdr = self.project_hdr['affinity_matrix'][data_type]
+
+        ## Look for matching affinity matrix
+        aff_path = self._match_affinity_matrix(affObj, kNN_graph, aff_hdr)
+
+        ## If no matching matrix is found then return None.
+        if aff_path is None:
+            return None
+
+        if self.verbose >= 3:
+            print(f"Attempting to load affinity matrix...")
+
+        ## If a path has been found to a matching kNN graph load it!
+        with open(aff_path, 'rb') as f:
+            affObj = pkl.load(f)
+
+        if self.verbose >= 3:
+            print(f"Affinity matrix successfully loaded!")
+
+        return affObj
+
+    def _match_affinity_matrix(self, affObj, kNNObj, aff_hdr):
 
         ## Get the kernel parameters and convert any arrays to lists.
-        tmp_kernel_params = tmp_aff.kernel_params.copy()
-        for k in tmp_kernel_params:
-            if isinstance(tmp_kernel_params[k], np.ndarray):
-                tmp_kernel_params[k] = tmp_kernel_params[k].tolist()
+        init_kernel_params = affObj.kernel_params.copy()
+        for k in init_kernel_params:
+            if isinstance(init_kernel_params[k], np.ndarray):
+                init_kernel_params[k] = init_kernel_params[k].tolist()
 
         ## If we have made affinity matrices(s) for this project, cycle
         ## through them until we get matching parameters.  We want to
         ## then load from the corresponding filepath.
-        aff_path = None
-        for tmp_path, aff_subhdr in aff_hdr.items():
+        matching_aff = None
+        for aff_name, aff_subhdr in aff_hdr.items():
 
             if self.verbose >= 5:
-                print(f"Checking affinity matrix at {tmp_path}...")
+                print(f"Checking affinity matrix at {aff_name}...")
 
             ## Check that... the affinity matrix type matches
-            if tmp_aff.__class__.__name__ != aff_subhdr['aff_type']:
+            if affObj.__class__.__name__ != aff_subhdr['aff_type']:
                 if self.verbose >= 5:
                     print(f"...affinity type doesn't match!")
                 continue
 
-            if tmp_aff.n_neighbors != aff_subhdr['n_neighbors']:
+            if affObj.n_neighbors != aff_subhdr['n_neighbors']:
                 if self.verbose >= 5:
                     print(f"...number of neighbors doesn't match!")
                 continue
 
             ## Check that... the kernel parameters match
             if np.any([val != aff_subhdr['kernel_params'][key]
-                       for key, val in tmp_kernel_params.items()]):
+                       for key, val in init_kernel_params.items()]):
                 if self.verbose >= 5:
                     print(f"...kernel parameters don't match!")
                 continue
 
             ## Check that... the type of kNN kernel matches
-            if X.__class__.__name__ != aff_subhdr['kNN_alg']:
+            if kNNObj.__class__.__name__ != aff_subhdr['kNN_alg']:
                 if self.verbose >= 5:
                     print(f"...kNN algorithm doesn't match!")
                 continue
 
             ## Check that... the kNN parameters upon which the matrix
             ## is built match.
-            if tmp_aff.kNN_params != aff_subhdr['kNN_params']:
+            if affObj.kNN_params != aff_subhdr['kNN_params']:
                 if self.verbose >= 5:
                     print(f"...kNN parameters don't match!")
                 continue
 
-            if X._filename != aff_subhdr['kNN_filename']:
+            ## Check that... the kNN graph's name is correct!
+            if kNNObj._filename != aff_subhdr['kNN_filename']:
                 if self.verbose >= 5:
                     print(f"...kNN graph (name) doesn't match!")
                 continue
 
             ## Check that... the matrix normalization matches
-            if tmp_aff.normalization != aff_subhdr['normalization']:
+            if affObj.normalization != aff_subhdr['normalization']:
                 if self.verbose >= 5:
                     print(f"...affinity normalization doesn't match!")
                 continue
 
             ## Check that... the matrix symmetry matches
-            if tmp_aff.symmetrize != aff_subhdr['symmetrize']:
+            if affObj.symmetrize != aff_subhdr['symmetrize']:
                 if self.verbose >= 5:
                     print(f"...affinity symmetry doesn't match!")
                 continue
 
             if self.perplexity is not None:
-                if np.any(tmp_aff._perp_arr != aff_subhdr['perp_arr']):
+                if np.any(affObj._perp_arr != aff_subhdr['perp_arr']):
                     if self.verbose >= 5:
                         print(f"...perplexities don't match!")
                     continue
 
             # If all checks are passed, save the corresponding path!
             if self.verbose >= 2:
-                print(f"Affinity matrix at {tmp_path} passed all"
+                print(f"Affinity matrix at {aff_name} passed all"
                       f" checks!")
 
-            aff_path = tmp_path
+            matching_aff = aff_name
             break
 
-        return aff_path
+        if matching_aff is None:
+            return None
 
-    def get_tSNE_embedding(self, affObj, null_fit=False):
+        ## In EMBEDR >v2.1 we want to be able to modify the project dir so that
+        ## it can be specified as a relative path. In previous versions the
+        ## header was keyed by a relative path at instantiation, which made it
+        ## impossible to load objects from different working dirs.
+        aff_name = matching_aff.split("/")[-1]
+        return os.path.join(self.project_dir, self.project_subdir, aff_name)
+
+    def get_tSNE_embedding(self,
+                           X,
+                           kNN_graph=None,
+                           aff_mat=None,
+                           null_fit=False,
+                           return_tSNE_objects=False):
 
         ## Get the number of requested embeddings
         n_embeds_made = 0
@@ -956,79 +975,51 @@ class EMBEDR(object):
         n_embeds_2_make = n_embeds_reqd
 
         ## Initialize an embedding using the input arguments.
-        tmp_tSNEObj = self._initialize_tSNE_embed(affObj)
+        if kNN_graph is None:
+            kNN_graph = self.get_kNN_graph(X, null_fit=null_fit)
+
+        if aff_mat is None:
+            aff_mat = self.get_affinity_matrix(X, kNN_graph=kNN_graph,
+                                               null_fit=null_fit)
+
+        # Make sure that an affinity matrix is loaded...
+        if not hasattr(aff_mat, "P"):
+            try:
+                aff_mat.P = aff_mat.calculate_affinities(kNN_graph,
+                                                         recalc=True)
+            except AttributeError:
+                aff_mat.P = aff_mat.calculate_affinities(kNN_graph,
+                                                         recalc=False)
+
+        embObj = self._initialize_tSNE_embed(aff_mat)
 
         ## If we're doing file caching...
         if self.do_cache:
 
-            ## Check to see if any embeddings have ever been made...
-            if 'Embed_tSNE' not in self.project_hdr:
+            [emb_Y,
+             emb_EES,
+             emb_path] = self.load_tSNE_embedding(X,
+                                                  kNN_graph=kNN_graph,
+                                                  aff_mat=aff_mat,
+                                                  embObj=embObj,
+                                                  null_fit=null_fit,
+                                                  raise_error=False)
 
-                if self.verbose >= 3:
-                    print(f"\nNo t-SNE embeddings have been made for this"
-                          f" data and/or seed!")
+            ## If anything was loaded, check it's shape!
+            if emb_Y is not None:
+                n_embeds_made = emb_Y.shape[0]
 
-                self.project_hdr['Embed_tSNE'] = dict(Data={}, Null={})
-
-                dra_path = None
-
-            ## If embeddings have been made...
-            else:
-                if null_fit:
-                    if self.verbose >= 3:
-                        print(f"Looking for matching t-SNE embeddings in"
-                              f" null cache.")
-
-                    dra_hdr = self.project_hdr['Embed_tSNE']['Null']
-                else:
-                    if self.verbose >= 3:
-                        print(f"Looking for matching t-SNE embeddings in"
-                              f" data cache.")
-
-                    dra_hdr = self.project_hdr['Embed_tSNE']['Data']
-
-                ## Look in the cache for a matching graph.
-                dra_path = self._match_tSNE_embeds(tmp_tSNEObj,
-                                                   affObj, dra_hdr)
-
-                ## If a matching embedding exists...
-                if dra_path is not None:
-
-                    ## Load it!
-                    if self.verbose >= 3:
-                        print(f"Attempting to load t-SNE embeddings...")
-
-                    with open(dra_path, 'rb') as f:
-                        tmp_Y, tmp_EES = pkl.load(f)
-
-                    ## Load up to the requested number of embeddings!
-                    tmp_Y   = tmp_Y[:n_embeds_reqd]
-                    tmp_EES = tmp_EES[:n_embeds_reqd]
-
-                    ## Check that there are the required number of embeddings
-                    n_embeds_made = tmp_Y.shape[0]
-
-                    if self.verbose >= 3:
-                        print(f"{n_embeds_made} t-SNE embeddings loaded!"
-                              f" ({n_embeds_reqd} requested)")
-
-                    ## If there are not enough embeddings, then we'll make more
-                    n_embeds_2_make = n_embeds_reqd - n_embeds_made
-
-                    ## If there are enough embeddings, return them!
-                    if n_embeds_2_make == 0:
-                        return tmp_Y, tmp_EES
+            ## If we don't need any more embeddings, then quit!
+            n_embeds_2_make = n_embeds_reqd - n_embeds_made
+            if n_embeds_2_make == 0:
+                return emb_Y, emb_EES
 
         ## If there aren't enough embeddings, we fit them here!
         tmp_embed_arr = np.zeros((n_embeds_2_make,
                                   self.n_samples,
                                   self.n_components))
 
-        ## Make sure that an affinity matrix is loaded...
-        # if not hasattr(affObj.P):
-        #     try:
-        #         affObj.calculate_affinities()
-
+        ## Create the required number of embeddings!
         for ii in range(n_embeds_2_make):
             if self.verbose >= 1:
                 print(f"\nFitting embedding {ii + 1}/{n_embeds_2_make}"
@@ -1038,159 +1029,198 @@ class EMBEDR(object):
             ## intitializations are offset in each iteration.
             seed_offset = n_embeds_made + ii
 
-            tmp_embed = tSNE_Embed(n_components=self.n_components,
-                                   perplexity=self.perplexity,
-                                   n_jobs=self.n_jobs,
-                                   random_state=self._seed + seed_offset,
-                                   verbose=self.verbose,
-                                   **self.DRA_params)
+            embObj = tSNE_Embed(n_components=self.n_components,
+                                perplexity=self.perplexity,
+                                n_jobs=self.n_jobs,
+                                random_state=self._seed + seed_offset,
+                                verbose=self.verbose,
+                                **self.DRA_params)
+            embObj.fit(aff_mat)
 
-            tmp_embed.fit(affObj)
-
-            tmp_embed_arr[ii] = tmp_embed.embedding[:]
+            tmp_embed_arr[ii] = embObj.embedding[:]
 
         ## If the current affinity matrix is not locally normalized...
-        if affObj.normalization != 'local':
+        if aff_mat.normalization != 'local':
+
             ## Make copy of current affinity parameters
             old_aff_params = {}
             if self.aff_params is not None:
                 old_aff_params = self.aff_params.copy()
             ## Force current normalization to be 'local'
             self.aff_params.update({"normalization": 'local'})
-            ## Get the current null iteration...
-            nNo = null_fit - 1
-            ## Get the correct kNN graph...
-            tmp_kNN = self.null_kNN[nNo] if null_fit else self.data_kNN
+
             ## Load the correct affinity matrix...
-            tmp_aff = self.get_affinity_matrix(tmp_kNN, null_fit=null_fit)
+            local_aff_mat = self.get_affinity_matrix(X,
+                                                     kNN_graph=kNN_graph,
+                                                     null_fit=null_fit)
+
+            # Make sure that an affinity matrix is loaded...
+            if not hasattr(local_aff_mat, "P"):
+                try:
+                    P = local_aff_mat.calculate_affinities(kNN_graph,
+                                                           recalc=True)
+                except AttributeError:
+                    P = local_aff_mat.calculate_affinities(kNN_graph,
+                                                           recalc=False)
+                local_aff_mat.P = P
+
             ## Return the old affinity matrix parameters
             self.aff_params = old_aff_params.copy()
+
         ## ... if it is locally normalized...
         else:
-            tmp_aff = affObj
+            local_aff_mat = aff_mat
 
         ## Calculate the EES
-        tmp_EES_arr = self.calculate_EES(tmp_aff.P, tmp_embed_arr)
+        tmp_EES_arr = self.calculate_EES(local_aff_mat.P, tmp_embed_arr)
 
+        ## Append the new results to those already loaded.
         if n_embeds_made > 0:
-            tmp_Y   = np.vstack((tmp_Y, tmp_embed_arr))
-            tmp_EES = np.vstack((tmp_EES, tmp_EES_arr))
+            emb_Y   = np.vstack((emb_Y, tmp_embed_arr))
+            emb_EES = np.vstack((emb_EES, tmp_EES_arr))
         else:
-            tmp_Y = tmp_embed_arr.copy()
-            tmp_EES = tmp_EES_arr.copy()
+            emb_Y = tmp_embed_arr.copy()
+            emb_EES = tmp_EES_arr.copy()
 
         if self.verbose >= 4:
-            print(f"Checking that the `tmp_Y` has size {tmp_Y.shape}")
-            print(f"Checking that the `tmp_EES` has size {tmp_EES.shape}")
+            print(f"Checking that the `emb_Y` has size {emb_Y.shape}")
+            print(f"Checking that the `emb_EES` has size {emb_EES.shape}")
 
         ## Then if we re caching files, we need to save these embeddings!
         if self.do_cache:
 
-            if dra_path is None:
-                if null_fit:
-                    dra_hdr = self.project_hdr['Embed_tSNE']['Null']
-                    n_times_made = len(dra_hdr)
-                    dra_name = f"Null_tSNE_Embed_{n_times_made:04d}.emb"
-                else:
-                    dra_hdr = self.project_hdr['Embed_tSNE']['Data']
-                    n_times_made = len(dra_hdr)
-                    dra_name = f"Data_tSNE_Embed_{n_times_made:04d}.emb"
+            ## If there are no saved kNN's yet, make that field in the header.
+            if 'Embed_tSNE' not in self.project_hdr:
+                self.project_hdr['Embed_tSNE'] = dict(Data={}, Null={})
+
+            ## Get the embeddings sub-header.
+            data_type = "Null" if null_fit else "Data"
+            emb_hdr = self.project_hdr['Embed_tSNE'][data_type]
+
+            ## If no embeddings were loaded, make a new file.
+            if emb_path is None:
+                ## Get the embedding filename.
+                n_times_made = len(emb_hdr)
+                emb_name = f"{data_type}_tSNE_Embed_{n_times_made:04d}.emb"
 
                 if self.verbose >= 2:
-                    print(f"Caching {dra_name} to file!")
+                    print(f"Caching {emb_name} to file!")
 
-                dra_path = path.join(self.project_path, dra_name)
-
+            ## If we already loaded some embeddings, add them to the file.
             else:
-                dra_name = dra_path.split("/")[-1]
+                emb_name = emb_path.split("/")[-1]
                 if self.verbose >= 2:
-                    print(f"Appending to cache {dra_name}!")
+                    print(f"Appending to cache {emb_name}!")
 
-            with open(dra_path, 'wb') as f:
-                pkl.dump([tmp_Y, tmp_EES], f)
+            ## Get the embedding filepath
+            emb_path = path.join(self.project_path, emb_name)
 
-            tmp_tSNE_params = self._get_matchable_tSNE_params(tmp_embed)
+            with open(emb_path, 'wb') as f:
+                pkl.dump([emb_Y, emb_EES], f)
 
-            dra_subhdr = dict(DRA_params=tmp_tSNE_params,
-                              affmat_filename=affObj._filename)
+            tSNE_params = self._get_matchable_tSNE_params(embObj)
+
+            emb_subhdr = dict(DRA_params=tSNE_params,
+                              affmat_filename=aff_mat._filename)
 
             ## Reset the project header json.
-            dra_hdr[dra_path] = dra_subhdr
+            emb_subpath = path.join(self.project_subdir, emb_name)
+            emb_hdr[emb_path] = emb_subhdr
             self._set_project_hdr(self.project_hdr)
 
-        return tmp_Y, tmp_EES
+        return emb_Y, emb_EES
 
-    def _initialize_tSNE_embed(self, P):
+    def _initialize_tSNE_embed(self, affObj):
 
         if self.verbose >= 3:
             print(f"\nInitializing t-SNE Embedding...")
 
-        out = tSNE_Embed(n_components=self.n_components,
-                         perplexity=self._perp_arr,
-                         n_jobs=self.n_jobs,
-                         random_state=self._seed,
-                         verbose=self.verbose,
-                         **self.DRA_params)
+        embObj = tSNE_Embed(n_components=self.n_components,
+                            perplexity=self._perp_arr,
+                            n_jobs=self.n_jobs,
+                            random_state=self._seed,
+                            verbose=self.verbose,
+                            **self.DRA_params)
 
-        out.initialize_embedding(P)
+        embObj.initialize_embedding(affObj)
 
-        # keep_params = ['initialization',
-        #                'learning_rate',
-        #                'n_early_iter',
-        #                'early_exag',
-        #                'early_mom',
-        #                'n_iter',
-        #                'exag',
-        #                'mom',
-        #                'max_grad_norm',
-        #                'max_step_norm',
-        #                't_dof',
-        #                'neg_grad_method',
-        #                'bh_theta',
-        #                'FI_n_interp_pts',
-        #                'FI_min_n_interv',
-        #                'FI_ints_per_interv']
-        # init_params = {}
-        # for key, val in out.__dict__.items():
-        #     if key not in keep_params:
-        #         continue
-        #     if isinstance(val, np.ndarray):
-        #         init_params[key] = val.tolist()
-        #     else:
-        #         init_params[key] = val
+        return embObj
 
-        # init_params = self._get_matchable_tSNE_params(out)
+    def load_tSNE_embedding(self,
+                            X,
+                            kNN_graph=None,
+                            aff_mat=None,
+                            embObj=None,
+                            null_fit=False,
+                            raise_error=True):
 
-        # self.DRA_params.update(self._get_matchable_tSNE_params(out))
+        ## If a kNN_graph has not been provided, load one!
+        if kNN_graph is None:
+            kNN_graph = self.load_kNN_graph(X, null_fit=null_fit,
+                                            raise_error=raise_error)
+        ## If an affinity matrix has not been provided, load one!
+        if aff_mat is None:
+            aff_mat = self.load_affinity_matrix(X, kNN_graph=kNN_graph,
+                                                null_fit=null_fit,
+                                                raise_error=raise_error)
 
-        # ##    n_components=2,
-        # ##    perplexity=None,
-        # initialization='random',
-        # learning_rate=None,
-        # n_early_iter=250,
-        # early_exag=None,
-        # early_mom=0.5,
-        # n_iter=1000,
-        # exag=1.,
-        # mom=0.8,
-        # max_grad_norm=None,
-        # max_step_norm=5,
-        # t_dof=1.,
-        # neg_grad_method="fft",
-        # bh_theta=0.5,
-        # FI_n_interp_pts=3,
-        # FI_min_n_interv=50,
-        # FI_ints_per_interv=1,
-        # callbacks=None,
-        # iter_per_callback=50,
-        # iter_per_log=50,
-        # ##    n_jobs=1,
-        # ##    random_state=None,
-        # ##    verbose=1)
+        ## Initialize the embedding object.
+        if embObj is None:
+            embObj = self._initialize_tSNE_embed(aff_mat)
 
-        return out
+        ## Check for the existence of loaded kNN graphs.
+        if "Embed_tSNE" not in self.project_hdr:
 
-    def _get_matchable_tSNE_params(self, obj):
+            err_str  = f"Error loading t-SNE embeddings: no t-SNE embeds"
+            err_str += f" have yet been made for this data and/or seed!"
+
+            ## If we're running this independent of `fit`, then raise an error!
+            if raise_error:
+                raise FileNotFoundError(err_str)
+            ## Otherwise, warn that nothing could be loaded.
+            elif self.verbose >= 2:
+                print(err_str)
+
+            ## We can't get past here with this function!
+            return [None, None, None]
+
+        ## Get the embedding header
+        data_type = "Null" if null_fit else "Data"
+        if self.verbose >= 3:
+            print(f"Looking for matching t-SNE embeddings in"
+                  f"the '{data_type}' cache.")
+        emb_hdr = self.project_hdr['Embed_tSNE'][data_type]
+
+        ## Look in the cache for a matching embedding.
+        emb_path = self._match_tSNE_embeds(embObj, aff_mat, emb_hdr)
+
+        ## If there is no matching embedding, return None.
+        if emb_path is None:
+            return [None, None, None]
+
+        ## Load it!
+        if self.verbose >= 3:
+            print(f"Attempting to load t-SNE embeddings...")
+
+        with open(emb_path, 'rb') as f:
+            emb_Y, emb_EES = pkl.load(f)
+
+        ## Get the number of requested embeddings
+        n_embeds_reqd = 1 if null_fit else self.n_data_embed
+
+        ## Load up to the requested number of embeddings!
+        emb_Y   = emb_Y[:n_embeds_reqd]
+        emb_EES = emb_EES[:n_embeds_reqd]
+
+        ## Check that there are the required number of embeddings
+        n_embeds_made = emb_Y.shape[0]
+        if self.verbose >= 3:
+            print(f"{n_embeds_made} t-SNE embeddings loaded!"
+                  f" ({n_embeds_reqd} requested)")
+
+        return emb_Y, emb_EES, emb_path
+
+    def _get_matchable_tSNE_params(self, embObj):
 
         ## Get the t-SNE parameters and convert any arrays to lists.
         matchable_params = ['initialization', 'learning_rate', 'n_early_iter',
@@ -1199,7 +1229,7 @@ class EMBEDR(object):
                             'neg_grad_method', 'bh_theta', 'FI_n_interp_pts',
                             'FI_min_n_interv', 'FI_ints_per_interv']
         tSNE_params = {}
-        for key, val in obj.__dict__.items():
+        for key, val in embObj.__dict__.items():
             if key not in matchable_params:
                 continue
             if isinstance(val, np.ndarray):
@@ -1209,32 +1239,44 @@ class EMBEDR(object):
 
         return tSNE_params
 
-    def _match_tSNE_embeds(self, tmp_Y, P, dra_hdr):
+    def _match_tSNE_embeds(self, embObj, affObj, emb_hdr):
 
         ## Get the matchable t-SNE embedding parameters
-        tmp_tSNE_params = self._get_matchable_tSNE_params(tmp_Y)
+        tmp_tSNE_params = self._get_matchable_tSNE_params(embObj)
 
-        dra_path = None
+        matching_embed = None
 
         ## We want to cycle through the available embeddings and see if they
         ## match the given parameters.
-        for tmp_path, dra_subhdr in dra_hdr.items():
+        for emb_name, emb_subhdr in emb_hdr.items():
+
+            if self.verbose >= 5:
+                print(f"Checking t-SNE embedding at {emb_name}...")
 
             ## Match the t-SNE runtime parameters
-            if dra_subhdr['DRA_params'] != tmp_tSNE_params:
+            if emb_subhdr['DRA_params'] != tmp_tSNE_params:
                 continue
 
             ## Match the affinity matrix.
-            if P._filename != dra_subhdr['affmat_filename']:
+            if affObj._filename != emb_subhdr['affmat_filename']:
                 continue
 
             # If all checks are passed, save the corresponding path!
             if self.verbose >= 2:
-                print(f"t-SNE embedding at {tmp_path} passed all checks!")
-            dra_path = tmp_path
+                print(f"t-SNE embedding at {emb_name} passed all checks!")
+
+            matching_embed = emb_name
             break
 
-        return dra_path
+        if matching_embed is None:
+            return None
+
+        ## In EMBEDR >v2.1 we want to be able to modify the project dir so that
+        ## it can be specified as a relative path. In previous versions the
+        ## header was keyed by a relative path at instantiation, which made it
+        ## impossible to load objects from different working dirs.
+        emb_name = matching_embed.split("/")[-1]
+        return os.path.join(self.project_dir, self.project_subdir, emb_name)
 
     def calculate_EES(self, P, Y):
 
@@ -1275,12 +1317,10 @@ class EMBEDR(object):
         rng = np.random.RandomState(self._seed + seed_offset)
 
         if sp.issparse(self.data_X):
-
             out = sp.csr_matrix([rng.choice(col, size=self.n_samples)
                                  for col in self.data_X.toarray().T]).T
 
         else:
-
             out = np.asarray([rng.choice(col, size=self.n_samples)
                               for col in self.data_X.T]).T
 
@@ -1517,6 +1557,8 @@ class EMBEDR_sweep(object):
                  n_data_embed=1,
                  n_null_embed=1,
                  n_jobs=1,
+                 allow_sparse=True,
+                 keep_affmats=False,
                  random_state=1,
                  verbose=1,
                  # File I/O parameters
@@ -1646,6 +1688,8 @@ class EMBEDR_sweep(object):
         self.n_null_embed = int(n_null_embed)
 
         self.n_jobs = int(n_jobs)
+        self._allow_sparse = bool(allow_sparse)
+        self._keep_affmats = bool(keep_affmats)
         self.rs = check_random_state(random_state)
         self._seed = self.rs.get_state()[1][0]
 
@@ -1725,6 +1769,8 @@ class EMBEDR_sweep(object):
                             n_data_embed=self.n_data_embed,
                             n_null_embed=self.n_null_embed,
                             n_jobs=self.n_jobs,
+                            allow_sparse=self._allow_sparse,
+                            keep_affmats=self._keep_affmats,
                             random_state=self.rs,
                             verbose=self.verbose,
                             do_cache=self.do_cache,
