@@ -27,6 +27,7 @@
 from collections import Iterable
 
 import EMBEDR.affinity as aff
+import EMBEDR.callbacks as cb
 import EMBEDR.initialization as initial
 from EMBEDR import _tsne
 from EMBEDR.quad_tree import QuadTree
@@ -88,8 +89,8 @@ class tSNE_Embed:
                  FI_min_n_interv=50,        ## Int >= 1 **
                  FI_ints_per_interv=1,      ## Int >= 1 **
                  callbacks=None,            ## ** track cbs, warn if different
-                 propagate_interrupt=False, ## Bool
-                 iter_per_callback=50,      ## Int > 0
+                 propagate_interrupt=False,  ## Bool
+                 iter_per_callback=10,      ## Int > 0
                  iter_per_log=50,           ## Int > 0
                  n_jobs=1,                  ## Int > 0
                  random_state=None,         ## Check method already exists
@@ -142,17 +143,21 @@ class tSNE_Embed:
         self.FI_min_n_interv = int(FI_min_n_interv)
         self.FI_ints_per_interv = int(FI_ints_per_interv)
 
-        if callbacks is not None:
-            err_str = f"All elements of `callbacks` must be callable objects!"
-            if isinstance(callbacks, Iterable):
-                if any(not callable(cb) for cb in callbacks):
+        if callbacks is None:
+            callbacks = dict(early_exag=cb.QuitEarlyExaggerationPhase(),
+                             no_exag=cb.QuitNoExaggerationPhase())
+        err_str = f"All elements of `callbacks` must be callable objects!"
+        for cb_type in ['early_exag', 'no_exag']:
+            if isinstance(callbacks[cb_type], Iterable):
+                if any(not callable(cb) for cb in callbacks[cb_type]):
                     raise ValueError(err_str)
 
-            elif callable(callbacks):
-                callbacks = (callbacks,)
+            elif callable(callbacks[cb_type]):
+                callbacks[cb_type] = (callbacks[cb_type],)
 
             else:
                 raise ValueError(err_str)
+
         self.callbacks = callbacks
         self.propagate_interrupt = bool(propagate_interrupt)
         self.iter_per_callback = iter_per_callback
@@ -191,6 +196,7 @@ class tSNE_Embed:
 
         ## Optimize Early Exaggeration Phase
         try:
+            self._callbacks = self.callbacks['early_exag']
             self.optimize(P,
                           self.n_early_iter,
                           self.early_exag,
@@ -203,6 +209,7 @@ class tSNE_Embed:
 
         ## Optimize regular descent phase
         try:
+            self._callbacks = self.callbacks['no_exag']
             self.optimize(P,
                           self.n_iter,
                           self.exag,
@@ -371,9 +378,9 @@ class tSNE_Embed:
 
         ## Callbacks can have an initialization method, call that here.
         do_callbacks = True
-        if isinstance(self.callbacks, Iterable):
-            for cb in self.callbacks:
-                getattr(cb, "optimization_starting", lambda: ...)()
+        if isinstance(self._callbacks, Iterable):
+            for cb in self._callbacks:
+                getattr(cb, "optimization_about_to_start", lambda: ...)()
         else:
             do_callbacks = False
 
@@ -427,8 +434,9 @@ class tSNE_Embed:
             if do_cbs_now:
 
                 ## Do all the callbacks.
+
                 cb_out = np.array([cb(ii + 1, d_kl, self.embedding)
-                                   for cb in self.callbacks]).astype(bool)
+                                   for cb in self._callbacks]).astype(bool)
 
                 ## If any of the callbacks say to stop...
                 if np.any(cb_out):

@@ -31,10 +31,29 @@ This version of the algorithm also supports the sample-wise specification of
 the `perplexity` and `n_neighbors` parameters, which are common hyperparameters
 for dimensionality reduction algorithms.
 
+The EMBEDR_sweep object has been implemented.  Users can now execute a sweep
+over `perplexity` or `n_neighbors`.  Users can also fit a cell-wise optimal
+t-SNE embedding as in Figure 7 of the manuscript.
+
+## New in Version 2.1
+
+The method now supports UMAP, although not to the same level as t-SNE.  It
+seems that UMAP will soon be supporting the use of pre-computed kNN graphs,
+at which point UMAP and t-SNE will be able to be used interchangably.
+
+A bug where EMBEDR objects could only be reloaded from the original path at
+which they were created has been amended and will be backwards compatible with
+previous versions.  Objects can now be loaded from any relative path
+specification for the project directory.
+
 ## To-Do
 
-- Add plotting scripts
-    - Single embedding with EMBEDR p-Values
-- Finish `EMBEDR_sweep` class
+- Plotting Utility
+    - Sweep results:
+        - EES vs hyperparameter (null and data)
+        - p-Values vs hyperparameter
+    - EMBEDR results:
+        - color plot by other metadata / supplied array.
+- k-Effective Calculator
 
 
