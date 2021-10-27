@@ -146,6 +146,9 @@ class tSNE_Embed:
         if callbacks is None:
             callbacks = dict(early_exag=cb.QuitEarlyExaggerationPhase(),
                              no_exag=cb.QuitNoExaggerationPhase())
+        elif callbacks == 'no_callbacks':
+            callbacks = dict(early_exag=cb.Callback(),
+                             no_exag=cb.Callback())
         err_str = f"All elements of `callbacks` must be callable objects!"
         for cb_type in ['early_exag', 'no_exag']:
             if isinstance(callbacks[cb_type], Iterable):
