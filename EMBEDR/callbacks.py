@@ -128,7 +128,7 @@ class QuitNoExaggerationPhase(Callback):
     gradient descent when the relative changes in DKL are less than a
     specified tolerance.
     """
-    def __init__(self, rel_err_tol=1.e-5, min_iter=250, verbose=False):
+    def __init__(self, rel_err_tol=1.e-6, min_iter=250, verbose=False):
         self.iter_count = 0
         self.last_log_time = None
         self.init_DKL = -1.0

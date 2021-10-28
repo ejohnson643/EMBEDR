@@ -1,12 +1,11 @@
 from collections import Counter
 import numpy as np
+import scanpy as sc
 from time import time
 
-
-def unique_logspace(lb, ub, n, dtype=int):
-    """Return array of up to `n` unique log-spaced ints from `lb` to `ub`."""
-    lb, ub = np.log10(lb), np.log10(ub)
-    return np.unique(np.logspace(lb, ub, n).astype(dtype))
+###############################################################################
+##  Output logging utilities.
+###############################################################################
 
 
 class Timer:
@@ -26,6 +25,59 @@ class Timer:
         dt = end - self.start_time
         if self.verbose >= 0:
             print(f"---> Time Elapsed: {dt:.2g} seconds!")
+
+
+###############################################################################
+##  Data I/O Functions
+###############################################################################
+tabula_muris_tissues = ['marrow', 'diaphragm', 'brain_non-myeloid']
+
+
+def load_data(data_name,
+              data_dir=None,
+              dtype=float,
+              load_metadata=True):
+
+    metadata = None
+    if data_name.lower() == 'mnist':
+
+        if data_dir is None:
+            data_dir = "./data/"
+
+        data_path = os.path.join(data_dir, "mnist2500_X.txt")
+
+        X = np.loadtxt(data_path).astype(dtype)
+
+        if load_metadata:
+            metadata_path = path.join(data_dir, "mnist2500_labels.txt")
+            metadata = np.loadtxt(metadata_path).astype(int)
+
+    elif data_name.lower() in tabula_muris_tissues:
+
+        if data_dir is None:
+            data_dir = "./data/tabula-muris/04_facs_processed_data/FACS/"
+
+        data_file = f"Processed_{data_name.title()}.h5ad"
+        data_path = os.path.join(data_dir, data_file)
+
+        X = sc.read_h5ad(data_path)
+
+    elif data_name.lower() == "ATAC":
+
+        if data_dir is None:
+            data_dir = "./data/10kPBMC_scATAC/02_processed_data/"
+
+        data_file = f"atac_pbmc_10k_nextgem_preprocessed_data.h5ad"
+        data_path = os.path.join(data_dir, data_file)
+
+        X = sc.read_h5ad(data_path)
+
+    return X, metadata
+
+
+###############################################################################
+##  Functions for eCDFs
+###############################################################################
 
 
 def calculate_eCDF(data, extend=False):
@@ -55,123 +107,51 @@ def calculate_eCDF(data, extend=False):
     return vals, CDF
 
 
-def make_categ_cmap(change_points=[0, 2, 3, 4, 5],
-                    categorical_cmap=None,
-                    cmap_idx=None,
-                    cmap_dx=0.001,
-                    reverse_last_interval=True):
-    """Make categorical colormap that fades between colors at specific values.
+def get_QQ_vals(data1, data2):
+    """Align 2 datasets' eCDFs for plotting on QQ-plot."""
 
-    This function takes in a list of end points + interior points to set as
-    the edge of regions on a colormap.  The function then returns a new
-    continuous colormap that transitions between these regions (fades to white,
-    then changes colors).
+    vals1, CDF1 = get_eCDF(data1, extend=True)
+    vals2, CDF2 = get_eCDF(data2, extend=True)
 
-    Parameters
-    ----------
-    change_points: Iterable (optional)
-        The values at which to change between categories.  The end-points (the
-        max and min values to be shown on the colormap) must be supplied so
-        that if 4 categories are desired, `change_points` must contain 4 + 1
-        values.
+    joint_vals = np.msort(np.unique(np.hstack((vals1, vals2))))
 
-    categorical_cmap: Seaborn colormap object (optional)
-        A categorical colormap (list of tuples) to which the intervals between
-        `change_points` will be mapped.
+    joint_CDF1 = np.zeros_like(joint_vals)
+    joint_CDF2 = np.zeros_like(joint_vals)
 
-    cmap_idx: Iterable (optional)
-        A list of indices that maps the colors in the colormap to the correct
-        interval. This allows for preset colormaps to be remapped by changing
-        `cmap_idx` from [0, 1, 2, 3] to [2, 3, 1, 0], for example.
+    id1, id2 = 0, 0
+    for ii, val in enumerate(joint_vals):
 
-    cmap_dx: float (optional, default=0.001)
-        Interval at which to interpolate colors.  Smaller will make the
-        colormap seem more continuous, but may have trouble rendering on some
-        computers.
+        joint_CDF1[ii] = CDF1[id1]
+        if (val in vals1) and (id1 + 1 < len(vals1)):
+            id1 += 1
 
-    reverse_last_interval: bool (optional, default=True)
-        Flag indicating whether to reverse the interpolation direction on the
-        last interval.  This can be useful to set up a maximal contrast in one
-        part of the colormap.
-    """
+        joint_CDF2[ii] = CDF2[id2]
+        if (val in vals2) and (id2 + 1 < len(vals2)):
+            id2 += 1
 
-    if categorical_cmap is None:
-        import seaborn as sns
-        categorical_cmap = sns.color_palette('colorblind')
-
-    ## Set the list of indices to use from the colormap
-    if cmap_idx is None:
-        cmap_idx = [4, 0, 3, 2] + list(range(4, len(change_points) - 1))
-
-    ## Set the base colors for regions of the colormap
-    colors = [categorical_cmap[idx] for idx in cmap_idx]
-
-    ## Make an appropriate grid of points on which to set colors.
-    color_grid = []
-    for intNo, end in enumerate(change_points[1:]):
-        color_grid += list(np.arange(change_points[intNo], end, cmap_dx))
-    color_grid += [change_points[-1]]
-    color_grid = np.sort(np.unique(np.asarray(color_grid)).squeeze())
-
-    ## Initialize the RGB+ array.
-    out_colors = np.ones((len(color_grid), 4))
-
-    ## Iterate through the grid, setting interpolated colors for each region.
-    start_idx = 0
-    for intNo, start in enumerate(change_points[:-1]):
-
-        ## Get the number of grid points in this interval
-        N_ticks = int((change_points[intNo + 1] - start) / cmap_dx)
-        ## If it's the last interval, add an extra.
-        if intNo == (len(change_points) - 2):
-            N_ticks += 1
-
-        ## Iterate through each of the RGB values.
-        for jj in range(3):
-
-            ## Base color for each interval
-            base_color = colors[intNo][jj]
-
-            ## Maximum divergence from the base color.
-            upper_bound = 0.75 * (1 - base_color) + base_color
-
-            ## Interpolated grid for the interval.
-            intv_color_grid = np.linspace(base_color, upper_bound, N_ticks)
-
-            ## If we're in the last interval, can reverse the direction
-            if (intNo == (len(change_points) - 2)) and reverse_last_interval:
-                intv_color_grid = intv_color_grid[::-1]
-
-            ## Set the colors!
-            out_colors[start_idx:start_idx + N_ticks, jj] = intv_color_grid
-
-        start_idx += N_ticks
-
-    ## Convert the grids and colors to matplotlib colormaps.
-    import matplotlib.colors as mcl
-    out_cmap = mcl.ListedColormap(out_colors)
-    out_cnorm = mcl.BoundaryNorm(color_grid, out_cmap.N)
-
-    return out_cmap, out_cnorm
+    return joint_vals, joint_CDF1, joint_CDF2
 
 
-def save_figure(fig,
-                fig_name,
-                fig_dir="./Figures",
-                formats=['pdf', 'png', 'svg'],
-                do_tight_layout=True,
-                bbox_inches=None,
-                transparent=True,
-                dpi=300):
+def interpolate(x_coords, y_coords, x_arr):
+    """Interpolate between coordinates to find the y-values at `x_arr`."""
 
-    if do_tight_layout:
-        fig.tight_layout()
+    x_out = np.zeros_like(x_arr).astype(float)
+    for ii, x in enumerate(x_arr):
+        if (x < x_coords[0]) or (x > x_coords[-1]):
+            err_str = f"Value {x} is outside interpolation regime!"
+            raise ValueError(err_str)
 
-    fig_path = os.path.join(fig_dir, fig_name)
+        if np.any(np.isclose(x, x_coords)):
+            idx = np.where(np.isclose(x, x_coords))[0]
+            if len(idx) > 1:
+                idx = idx[0]
+            x_out[ii] = (y_coords[idx]).squeeze()
+            continue
 
-    for fmt in formats:
-        fig.savefig(fig_path + "." + fmt,
-                    format=fmt,
-                    bbox_inches=bbox_inches,
-                    transparent=transparent,
-                    dpi=dpi)
+        grid_id = np.searchsorted(x_coords, x, side='right')
+        x_diff = (x_coords[grid_id] - x_coords[grid_id - 1])
+        frac = (x - x_coords[grid_id - 1])
+        slope = (y_coords[grid_id] - y_coords[grid_id - 1]) / x_diff
+        x_out[ii] = (y_coords[grid_id - 1] + slope * frac).squeeze()
+
+    return np.asarray(x_out, dtype=float).squeeze()

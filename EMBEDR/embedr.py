@@ -1,8 +1,10 @@
 
 import EMBEDR.affinity as aff
+from EMBEDR._affinity import calculate_kEff as _calc_kEff_from_sparse
 import EMBEDR.callbacks as cb
 import EMBEDR.ees as ees
 import EMBEDR.nearest_neighbors as nn
+import EMBEDR.plotting_utility as putl
 from EMBEDR.tsne import tSNE_Embed
 from EMBEDR.umap import _initialize_UMAP_embed as initUMAP
 import EMBEDR.utility as utl
@@ -39,6 +41,7 @@ class EMBEDR(object):
                  # Affinity matrix parameters
                  aff_type="fixed_entropy_gauss",
                  aff_params={},
+                 kEff_alpha=0.02,
                  # Dimensionality reduction parameters
                  n_components=2,
                  DRA='tsne',
@@ -67,20 +70,21 @@ class EMBEDR(object):
         ## kNN graph parameters
         self.kNN_metric = kNN_metric
         self.kNN_alg    = kNN_alg
-        self.kNN_params = kNN_params
+        self.kNN_params = kNN_params.copy()
 
         ## Affinity matrix parameters
         self.aff_type   = aff_type
-        self.aff_params = aff_params
+        self.aff_params = aff_params.copy()
+        self.kEff_alpha = kEff_alpha
 
         ## Dimensionality reduction parameters
         self.n_components = n_components
         self.DRA          = DRA
-        self.DRA_params   = DRA_params
+        self.DRA_params   = DRA_params.copy()
 
         ## Embedding statistic parameters
         self.EES_type   = EES_type
-        self.EES_params = EES_params
+        self.EES_params = EES_params.copy()
         self.pVal_type  = pVal_type
 
         ## Runtime Parameters
@@ -138,6 +142,12 @@ class EMBEDR(object):
             raise ValueError(err_str + f" {self.VALID_AFF}.")
         if not isinstance(self.aff_params, dict):
             err_str  = f"Input argument `aff_params` must be a dictionary."
+            raise ValueError(err_str)
+        try:
+            self.kEff_alpha = float(self.kEff_alpha)
+            assert self.kEff_alpha > 0
+        except (ValueError, AssertionError):
+            err_str = f"`kEff_alpha` must be a nonnegative float!"
             raise ValueError(err_str)
 
         ## Dimensionality reduction parameters
@@ -507,24 +517,14 @@ class EMBEDR(object):
             ## If we're using t-SNE to embed or DKL as the EES, we need an
             ## affinity matrix.
             if (self.DRA in ['tsne', 't-sne']):
-                self.data_P = self.get_affinity_matrix(X=self.data_X,
-                                                       kNN_graph=self.data_kNN)
+                dP = self.get_affinity_matrix(X=self.data_X,
+                                              kNN_graph=self.data_kNN)
+                self.data_P = dP
 
             elif (self.DRA in ['umap']) and (self.EES_type == 'dkl'):
-                if 'normalization' not in self.aff_params:
-                    self.aff_params['normalization'] = 'local'
-                    if self.verbose >= 5:
-                        print(f"Affinity matrix normalization wasn't set, "
-                              f"setting to be 'local' for use with EES.")
-                if self.aff_params['normalization'] != 'local':
-                    warn_str =  f"WARNING: Setting affinity matrix"
-                    warn_str += f" normalization to 'global' may result in"
-                    warn_str += f" illegal values for the EES. Use aff_params"
-                    warn_str += f"['normalization'] = 'local' instead."
-                    warnings.warn(warn_str)
-
-                self.data_P = self.get_affinity_matrix(X=self.data_X,
-                                                       kNN_graph=self.data_kNN)
+                dP = self._get_asym_local_affmat(X=self.data_X,
+                                                 kNN_graph=self.data_kNN)
+                self.data_P = dP
 
             ## We then need to get the requested embeddings.
             if (self.DRA in ['tsne', 't-sne']):
@@ -581,22 +581,10 @@ class EMBEDR(object):
                     self.null_P[nNo] = nP
 
                 elif (self.DRA in ['umap']) and (self.EES_type == 'dkl'):
-                    if 'normalization' not in self.aff_params:
-                        self.aff_params['normalization'] = 'local'
-                        if self.verbose >= 5:
-                            print(f"Affinity matrix normalization wasn't set, "
-                                  f"setting to be 'local' for use with EES.")
-                    if self.aff_params['normalization'] != 'local':
-                        warn_str =  f"WARNING: Setting affinity matrix"
-                        warn_str += f" normalization to 'global' may result in"
-                        warn_str += f" illegal values for the EES. Use"
-                        warn_str += f" aff_params['normalization'] = 'local'."
-                        if self.verbose >= 4:
-                            warnings.warn(warn_str)
 
-                    nP = self.get_affinity_matrix(null_X,
-                                                  kNN_graph=nKNN,
-                                                  null_fit=null_fit)
+                    nP = self._get_asym_local_affmat(null_X,
+                                                     kNN_graph=nKNN,
+                                                     null_fit=null_fit)
                     self.null_P[nNo] = nP
 
                 ## We then need to get the requested embeddings.
@@ -606,7 +594,6 @@ class EMBEDR(object):
                                                        aff_mat=nP,
                                                        null_fit=null_fit)
                 elif (self.DRA in ['umap']):
-                    print(f"WARNING: UMAP has not been implemented!")
                     nY, nEES = self.get_UMAP_embedding(null_X,
                                                        kNN_graph=nKNN,
                                                        aff_mat=nP,
@@ -1113,6 +1100,32 @@ class EMBEDR(object):
         aff_name = matching_aff.split("/")[-1]
         return os.path.join(self.project_dir, self.project_subdir, aff_name)
 
+    def _get_asym_local_affmat(self, X, kNN_graph=None, null_fit=False):
+
+        old_aff_params = {}
+        if self.aff_params is not None:
+            old_aff_params = self.aff_params.copy()
+
+        ## Force current normalization to be 'local' and symmetry to be False.
+        self.aff_params.update({"normalization": 'local',
+                                "symmetrize": False})
+
+        aff_mat = self.get_affinity_matrix(X, kNN_graph=kNN_graph,
+                                           null_fit=null_fit)
+
+        ## Return the old affinity matrix parameters
+        self.aff_params = old_aff_params.copy()
+
+        return aff_mat
+
+    def _recalculate_P(self, affObj, kNN_graph):
+        if not hasattr(affObj, "P"):
+            try:
+                affObj.P = affObj.calculate_affinities(kNN_graph, recalc=True)
+            except AttributeError:
+                affObj.P = affObj.calculate_affinities(kNN_graph, recalc=False)
+        return affObj
+
     def get_tSNE_embedding(self,
                            X,
                            kNN_graph=None,
@@ -1133,16 +1146,20 @@ class EMBEDR(object):
             aff_mat = self.get_affinity_matrix(X, kNN_graph=kNN_graph,
                                                null_fit=null_fit)
 
-        # Make sure that an affinity matrix is loaded...
-        if not hasattr(aff_mat, "P"):
-            try:
-                aff_mat.P = aff_mat.calculate_affinities(kNN_graph,
-                                                         recalc=True)
-            except AttributeError:
-                aff_mat.P = aff_mat.calculate_affinities(kNN_graph,
-                                                         recalc=False)
+        ## Make sure that an affinity matrix is loaded...
+        aff_mat = self._recalculate_P(aff_mat, kNN_graph)
 
+        ## Initialize the t-SNE object.
         embObj = self._initialize_tSNE_embed(aff_mat)
+
+        ## Get a locally-normed and asymmetric affinity matrix for EES...
+        local_aff_mat = self._get_asym_local_affmat(X, kNN_graph=kNN_graph,
+                                                    null_fit=null_fit)
+        local_aff_mat = self._recalculate_P(local_aff_mat, kNN_graph)
+
+        ## If we haven't calculated kEff, do that here.
+        if (not hasattr(self, "kEff")) and (not null_fit):
+            self._calculate_kEff(local_aff_mat)
 
         ## If we're doing file caching...
         if self.do_cache:
@@ -1189,38 +1206,6 @@ class EMBEDR(object):
             embObj.fit(aff_mat)
 
             tmp_embed_arr[ii] = embObj.embedding[:]
-
-        ## If the current affinity matrix is not locally normalized...
-        if aff_mat.normalization != 'local':
-
-            ## Make copy of current affinity parameters
-            old_aff_params = {}
-            if self.aff_params is not None:
-                old_aff_params = self.aff_params.copy()
-            ## Force current normalization to be 'local'
-            self.aff_params.update({"normalization": 'local'})
-
-            ## Load the correct affinity matrix...
-            local_aff_mat = self.get_affinity_matrix(X,
-                                                     kNN_graph=kNN_graph,
-                                                     null_fit=null_fit)
-
-            # Make sure that an affinity matrix is loaded...
-            if not hasattr(local_aff_mat, "P"):
-                try:
-                    P = local_aff_mat.calculate_affinities(kNN_graph,
-                                                           recalc=True)
-                except AttributeError:
-                    P = local_aff_mat.calculate_affinities(kNN_graph,
-                                                           recalc=False)
-                local_aff_mat.P = P
-
-            ## Return the old affinity matrix parameters
-            self.aff_params = old_aff_params.copy()
-
-        ## ... if it is locally normalized...
-        else:
-            local_aff_mat = aff_mat
 
         ## Calculate the EES
         tmp_EES_arr = self.calculate_EES(local_aff_mat.P, tmp_embed_arr)
@@ -1339,7 +1324,7 @@ class EMBEDR(object):
         data_type = "Null" if null_fit else "Data"
         if self.verbose >= 3:
             print(f"Looking for matching t-SNE embeddings in"
-                  f"the '{data_type}' cache.")
+                  f" the '{data_type}' cache.")
         emb_hdr = self.project_hdr['Embed_tSNE'][data_type]
 
         ## Look in the cache for a matching embedding.
@@ -1457,13 +1442,11 @@ class EMBEDR(object):
         embObj = self._initialize_UMAP_embed(X, seed)
 
         # Make sure that an affinity matrix is loaded...
-        if not hasattr(aff_mat, "P"):
-            try:
-                aff_mat.P = aff_mat.calculate_affinities(kNN_graph,
-                                                         recalc=True)
-            except AttributeError:
-                aff_mat.P = aff_mat.calculate_affinities(kNN_graph,
-                                                         recalc=False)
+        aff_mat = self._recalculate_P(aff_mat, kNN_graph)
+
+        ## If we haven't calculated kEff, do that here.
+        if (not hasattr(self, "kEff")) and (not null_fit):
+            self._calculate_kEff(aff_mat)
 
         ## If we're doing file caching try to load previous embeddings!
         if self.do_cache:
@@ -1761,6 +1744,13 @@ class EMBEDR(object):
         emb_name = matching_embed.split("/")[-1]
         return os.path.join(self.project_dir, self.project_subdir, emb_name)
 
+    def _calculate_kEff(self, affObj):
+        kEff_arr = _calc_kEff_from_sparse(affObj.P.data,
+                                          affObj.P.indptr,
+                                          alpha_nu=self.kEff_alpha)
+        self._kEff = kEff_arr.copy()
+        self.kEff = np.median(kEff_arr.astype(float))
+
     def calculate_EES(self, P, Y):
 
         if self.EES_type == 'dkl':
@@ -1954,7 +1944,7 @@ class EMBEDR(object):
             Y = self.null_Y[embed_2_show]
 
         [pVal_cmap,
-         pVal_cnorm] = utl.make_categ_cmap(change_points=pVal_clr_change)
+         pVal_cnorm] = putl.make_categ_cmap(change_points=pVal_clr_change)
 
         color_bounds = np.linspace(pVal_clr_change[0],
                                    pVal_clr_change[-1],
@@ -2026,6 +2016,7 @@ class EMBEDR_sweep(object):
                  # Affinity matrix parameters
                  aff_type="fixed_entropy_gauss",
                  aff_params={},
+                 kEff_alpha=0.02,
                  # Dimensionality reduction parameters
                  n_components=2,
                  DRA='tsne',
@@ -2142,20 +2133,21 @@ class EMBEDR_sweep(object):
         ## kNN graph parameters
         self.kNN_metric = kNN_metric
         self.kNN_alg = kNN_alg.lower()
-        self.kNN_params = kNN_params
+        self.kNN_params = kNN_params.copy()
 
         ## Affinity matrix parameters
         self.aff_type = aff_type.lower()
-        self.aff_params = aff_params
+        self.aff_params = aff_params.copy()
+        self.kEff_alpha = kEff_alpha
 
         ## Dimensionality reduction parameters
         self.n_components = int(n_components)
         self.DRA = DRA.lower()
-        self.DRA_params = DRA_params
+        self.DRA_params = DRA_params.copy()
 
         ## Embedding statistic parameters
         self.EES_type = EES_type.lower()
-        self.EES_params = EES_params
+        self.EES_params = EES_params.copy()
         self.pVal_type = pVal_type.lower()
 
         self._use_t_stat = bool(use_t_stat_for_opt)
@@ -2223,6 +2215,8 @@ class EMBEDR_sweep(object):
         self.pValues    = {}
         self.data_EES   = {}
         self.null_EES   = {}
+        self.kEff       = {}
+        self._kEff       = {}
 
         ## Loop over the values of the hyperparameters!
         for ii, hp in enumerate(self.sweep_values):
@@ -2236,6 +2230,7 @@ class EMBEDR_sweep(object):
                 perp = hp
             else:
                 knn = hp
+
             embObj = EMBEDR(perplexity=perp,
                             n_neighbors=knn,
                             kNN_metric=self.kNN_metric,
@@ -2243,6 +2238,7 @@ class EMBEDR_sweep(object):
                             kNN_params=self.kNN_params,
                             aff_type=self.aff_type,
                             aff_params=self.aff_params,
+                            kEff_alpha=self.kEff_alpha,
                             n_components=self.n_components,
                             DRA=self.DRA,
                             DRA_params=self.DRA_params,
@@ -2269,6 +2265,8 @@ class EMBEDR_sweep(object):
             self.data_EES[hp]   = embObj.data_EES.copy()
             self.null_EES[hp]   = embObj.null_EES.copy()
             self.pValues[hp]    = embObj.pValues.copy()
+            self.kEff[hp]       = embObj.kEff
+            self._kEff[hp]       = embObj._kEff
 
         return
 
@@ -2509,10 +2507,32 @@ class EMBEDR_sweep(object):
 
         optObj.fit(self.data_X)
 
-
-
         self.opt_obj            = optObj
         self.opt_embed          = optObj.data_Y[:]
         self.opt_embed_data_EES = optObj.data_EES[:]
         self.opt_embed_null_EES = optObj.null_EES[:]
         self.opt_embed_pValues  = optObj.pValues[:]
+
+    def _get_kEff_from_hp(self, hp_value):
+        sort_idx = np.argsort(self.sweep_values)
+        x_coords = self.sweep_values[sort_idx]
+        y_coords = [self.kEff[self.sweep_values[ii]] for ii in sort_idx]
+
+        try:
+            _ = (hp for hp in hp_value)
+        except TypeError:
+            hp_value = [hp_value]
+
+        return utl.interpolate(x_coords, y_coords, np.asarray(perp)).squeeze()
+
+    def _get_hp_from_kEff(self, kEff):
+        sort_idx = np.argsort(self.sweep_values)
+        y_coords = self.sweep_values[sort_idx]
+        x_coords = [self.kEff[self.sweep_values[ii]] for ii in sort_idx]
+
+        try:
+            _ = (kE for kE in kEff)
+        except TypeError:
+            kEff = [kEff]
+
+        return interpolate(x_coords, y_coords, np.asarray(nn)).squeeze()

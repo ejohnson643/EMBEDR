@@ -210,4 +210,20 @@ def GaussianAff_fromPrec(distances,
     return P
 
 
+@jit(nopython=True)
+def calculate_kEff(P, row_idx, alpha_nu=0.02):
 
+    kEff_arr = np.zeros_like(row_idx)[:-1]
+
+    for ii in range(len(kEff_arr)):
+        ## Find the max value in the row.
+        P_row_max = -1
+        for jj in range(row_idx[ii], row_idx[ii + 1]):
+            if P[jj] > P_row_max:
+                P_row_max = P[jj]
+        ## Count the number larger
+        for jj in range(row_idx[ii], row_idx[ii + 1]):
+            if P[jj] > (P_row_max * alpha_nu):
+                kEff_arr[ii] += 1
+
+    return kEff_arr

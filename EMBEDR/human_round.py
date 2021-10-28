@@ -4,6 +4,13 @@
 
 import numpy as np
 
+## The thresholds at which to modify rounding in `human_round`
+round_levels = {  5:   5,
+                 20:  10,
+                100:  50,
+                500: 100}
+
+
 def is_iterable(x):
     """Check if a variable is iterable"""
 
@@ -13,11 +20,12 @@ def is_iterable(x):
     except TypeError:
         return False
 
-## The thresholds at which to modify rounding in `human_round`
-round_levels = {  5:   5,
-                 20:  10,
-                100:  50,
-                500: 100}
+
+def unique_logspace(lb, ub, n, dtype=int):
+    """Return array of up to `n` unique log-spaced ints from `lb` to `ub`."""
+    lb, ub = np.log10(lb), np.log10(ub)
+    return np.unique(np.logspace(lb, ub, n).astype(dtype))
+
 
 def human_round(x,
                 round_levels=round_levels,
