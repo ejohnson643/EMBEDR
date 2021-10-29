@@ -89,7 +89,7 @@ class AffinityMatrix(object):
                  random_state=1,
                  verbose=1):
 
-        self.kernel_params = kernel_params
+        self.kernel_params = kernel_params.copy()
 
         self.symmetrize = bool(symmetrize)
 
@@ -371,11 +371,11 @@ def _initialize_affinity_matrix(X,
     tmp_kNN_params = {'n_neighbors': n_neighbors}
     tmp_kNN_params.update(kNN_params)
 
-    aff_obj = aff_class(kernel_params=kernel_params,
+    aff_obj = aff_class(kernel_params=kernel_params.copy(),
                         symmetrize=symmetrize,
                         normalization=normalization,
                         precomputed=precomputed,
-                        kNN_params=tmp_kNN_params,
+                        kNN_params=tmp_kNN_params.copy(),
                         n_jobs=n_jobs,
                         random_state=random_state,
                         verbose=verbose,

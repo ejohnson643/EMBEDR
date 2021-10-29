@@ -87,7 +87,10 @@ class kNNIndex(object):
                  **kwargs):
 
         self.metric = self._check_metric(metric)
-        self.metric_params = metric_params
+        if metric_params is not None:
+            self.metric_params = metric_params.copy()
+        else:
+            self.metric_params = None
         self.n_jobs = int(n_jobs)
         self.random_state = check_random_state(random_state)
         self.verbose = float(verbose)
