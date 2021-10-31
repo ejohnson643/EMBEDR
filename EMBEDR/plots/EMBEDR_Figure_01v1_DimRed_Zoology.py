@@ -49,18 +49,22 @@ def make_figure(X, cluster_labels, clusters_2_label=None, label_colors=None,
 
     if label_colors is None:
         cblind_cmap = sns.color_palette('colorblind')
-        l2cl = {cl: (ii + 3) % 10 for ii, cl in enumerate(clust_2_label)}
-        label_colors = [cblind_cmap[l2cl[ll]] if (ll in clust_2_label)
-                        else 'lightgrey' for ll in labels]
+        l2cl = {cl: (ii + 3) % 10
+                for ii, cl in enumerate(clusters_2_label)}
+        label_colors = [cblind_cmap[l2cl[ll]] if (ll in clusters_2_label)
+                        else 'lightgrey' for ll in cluster_labels.squeeze()]
+        label_colors = np.asarray(label_colors)
 
     if label_sizes is None:
-        label_sizes = [3 if (ll in clust_2_label) else 1 for ll in labels]
+        label_sizes = [3 if (ll in clusters_2_label) else 1
+                       for ll in cluster_labels]
+        label_sizes = np.asarray(label_sizes)
 
     if DRAs is None:
         ## Set parameters at which to plot data
-        DRAs = [('tSNE', 7),
+        DRAs = [('tSNE', 9),
                 ('UMAP', 15),
-                ('tSNE', 250),
+                ('tSNE', 350),
                 ('UMAP', 400)]
 
     if project_name is None:
@@ -89,11 +93,23 @@ def make_figure(X, cluster_labels, clusters_2_label=None, label_colors=None,
                             **EMBEDR_params)
             Y, _ = embObj.get_tSNE_embedding(X)
 
+        if alg.lower() in ['umap']:
+            embObj = EMBEDR(X=X,
+                            n_neighbors=param,
+                            DRA='umap',
+                            n_data_embed=1,
+                            n_jobs=-1,
+                            project_name=project_name,
+                            project_dir=project_dir,
+                            **EMBEDR_params)
+            Y, _ = embObj.get_UMAP_embedding(X)
+
         rowNo = int(algNo / n_cols)
         colNo = int(algNo % n_cols)
         ax = main_axes[rowNo][colNo]
 
-        add_plot_color_by_cluster(Y, cluster_labels)
+        add_plot_color_by_cluster(Y[0], cluster_labels, ax, label_colors,
+                                  label_sizes, clusters_2_label)
     return
 
 
@@ -128,7 +144,7 @@ def set_main_grid(fig_wid=7.2, fig_hgt=5.76, n_rows=2, n_cols=2,
 
 
 def add_plot_color_by_cluster(Y, cluster_labels, ax, label_colors, label_sizes,
-                              clusters_2_label):
+                              clusters_2_label, scatter_alpha=0.2):
 
     ax.scatter(*Y.T,
                c=label_colors,
@@ -136,7 +152,7 @@ def add_plot_color_by_cluster(Y, cluster_labels, ax, label_colors, label_sizes,
                alpha=scatter_alpha)
 
     for cNo, cluster in enumerate(clusters_2_label):
-        good_idx = (cluster_labels == clusters)
+        good_idx = (cluster_labels == cluster).squeeze()
 
         cluster_median = np.median(Y[good_idx], axis=0)
 
@@ -329,8 +345,8 @@ if __name__ == "__main__":
             cell_ont_ids = sorted(cell_ont_ids,
                                   key=lambda cO: -cell_ont_counts[cO])
 
-            cell_ont_labels = [f"{cO} (N = {cell_ont_counts[cO]})"
-                               for cO in cell_ont_ids]
+            cell_ont_labels = np.asarray([f"{cO} (N = {cell_ont_counts[cO]})"
+                                          for cO in cell_ont_ids])
 
             cell_ont_cmap = sns.color_palette('husl', len(cell_ont_ids))
 

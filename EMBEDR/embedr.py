@@ -20,7 +20,7 @@ import scipy.sparse as sp
 import scipy.stats as st
 from sklearn.utils import check_array, check_random_state
 from umap import UMAP
-
+import warnings
 
 class EMBEDR(object):
 
@@ -753,6 +753,7 @@ class EMBEDR(object):
         ## If a path has been found to a matching kNN graph load it!
         with open(kNN_path, 'rb') as f:
             kNNObj = pkl.load(f)
+            kNNObj.verbose = self.verbose
 
         ## If the kNN is an ANNOY object, try to load the ANNOY index using the
         ## current project directory.
@@ -774,7 +775,7 @@ class EMBEDR(object):
                 print_str += f"... not enough neighbors, querying for more!"
                 print(print_str)
 
-            idx, dst = out.query(X, self._max_nn + 1)
+            idx, dst = kNNObj.query(X, self._max_nn + 1)
             kNNObj.kNN_dst = dst[:, 1:]
             kNNObj.kNN_idx = idx[:, 1:]
 
@@ -1004,6 +1005,7 @@ class EMBEDR(object):
         ## If a path has been found to a matching kNN graph load it!
         with open(aff_path, 'rb') as f:
             affObj = pkl.load(f)
+            affObj.verbose = self.verbose
 
         if self.verbose >= 3:
             print(f"Affinity matrix successfully loaded!")

@@ -224,10 +224,11 @@ class BallTree(kNNIndex):
 
     def fit(self, X, k_NN):
 
-        timer_str =  f"Finding {k_NN} nearest neighbors using an exact search"
-        timer_str += f" and the {self.metric} metric..."
-        timer = utl.Timer(timer_str, verbose=self.verbose)
-        timer.__enter__()
+        if self.verbose:
+            timer_str =  f"Finding {k_NN} nearest neighbors using an exact"
+            timer_str += f" search and the {self.metric} metric..."
+            timer = utl.Timer(timer_str, verbose=self.verbose)
+            timer.__enter__()
 
         ## Get the data shape
         self.n_samples, self.n_features = X.shape[0], X.shape[1]
@@ -241,7 +242,8 @@ class BallTree(kNNIndex):
         ## Return the indices and distances of the k_NN nearest neighbors.
         distances, NN_idx = self.index.kneighbors(n_neighbors=k_NN)
 
-        timer.__exit__()
+        if self.verbose:
+            timer.__exit__()
 
         self.kNN_idx = NN_idx[:, :]
         self.kNN_dst = distances[:, :]
@@ -261,18 +263,20 @@ class BallTree(kNNIndex):
             NFE.args[0] = err_str + "\n\n" + NFE.args[0]
             raise NFE
 
-        timer_str =  f"Finding {k_NN} nearest neighbors in an existing kNN"
-        timer_str += f" graph using an exact search and the {self.metric}"
-        timer_str += f" metric..."
-        timer = utl.Timer(timer_str, verbose=self.verbose)
-        timer.__enter__()
+        if self.verbose:
+            timer_str =  f"Finding {k_NN} nearest neighbors in an existing kNN"
+            timer_str += f" graph using an exact search and the {self.metric}"
+            timer_str += f" metric..."
+            timer = utl.Timer(timer_str, verbose=self.verbose)
+            timer.__enter__()
 
         ## Find the indices and distances to the nearest neighbors of the
         ## queried points
         distances, NN_idx = self.index.kneighbors(query, n_neighbors=k_NN)
 
         ## Stop the watch
-        timer.__exit__()
+        if self.verbose:
+            timer.__exit__()
 
         ## Return the indices of the nearest neighbors to the queried points
         ## *in the original graph* and the distances to those points.
@@ -367,10 +371,11 @@ class Annoy(kNNIndex):
 
     def fit(self, X, k_NN):
 
-        timer_str =  f"Finding {k_NN} nearest neighbors using an approximate"
-        timer_str += f" search and the {self.metric} metric..."
-        timer = utl.Timer(timer_str, verbose=self.verbose)
-        timer.__enter__()
+        if self.verbose:
+            timer_str =  f"Finding {k_NN} nearest neighbors using an"
+            timer_str += f" approximate search and the {self.metric} metric..."
+            timer = utl.Timer(timer_str, verbose=self.verbose)
+            timer.__enter__()
 
         X = check_array(X, accept_sparse=True, ensure_2d=True)
 
@@ -416,7 +421,8 @@ class Annoy(kNNIndex):
             Parallel(n_jobs=self.n_jobs, require="sharedmem")(
                 delayed(getnns)(ii) for ii in range(self.n_samples))
 
-        timer.__exit__()
+        if self.verbose:
+            timer.__exit__()
 
         self.kNN_idx = NN_idx[:, :]
         self.kNN_dst = distances[:, :]
@@ -438,11 +444,12 @@ class Annoy(kNNIndex):
             err_str += f" constructed!  (Run kNNIndex.fit(X, k_NN))"
             raise ValueError(err_str)
 
-        timer_str = f"Finding {k_NN} nearest neighbors to query points in"
-        timer_str += f" existing kNN graph using an approximate search and the"
-        timer_str += f" '{self.metric}'' metric..."
-        timer = utl.Timer(timer_str, verbose=self.verbose)
-        timer.__enter__()
+        if self.verbose:
+            timer_str = f"Finding {k_NN} nearest neighbors to query points in"
+            timer_str += f" existing kNN graph using an approximate search and"
+            timer_str += f" the '{self.metric}'' metric..."
+            timer = utl.Timer(timer_str, verbose=self.verbose)
+            timer.__enter__()
 
         ## Check query shape, if 1D array, reshape.
         if query.ndim == 1:
@@ -480,7 +487,8 @@ class Annoy(kNNIndex):
                 delayed(getnns)(ii) for ii in range(n_query)
             )
 
-        timer.__exit__()
+        if self.verbose:
+            timer.__exit__()
 
         return NN_idx, distances
 
@@ -673,10 +681,11 @@ class NNDescent(kNNIndex):
 
     def fit(self, X, k_NN):
 
-        timer_str =  f"Finding {k_NN} approximate nearest neighbors using"
-        timer_str += f" NNDescent and the '{self.metric}' metric..."
-        timer = utl.Timer(timer_str, verbose=self.verbose)
-        timer.__enter__()
+        if self.verbose:
+            timer_str =  f"Finding {k_NN} approximate nearest neighbors using"
+            timer_str += f" NNDescent and the '{self.metric}' metric..."
+            timer = utl.Timer(timer_str, verbose=self.verbose)
+            timer.__enter__()
 
         ## Get the data shape
         self.n_samples, self.n_features = X.shape[0], X.shape[1]
@@ -739,7 +748,8 @@ class NNDescent(kNNIndex):
 
             raise ValueError(err_str)
 
-        timer.__exit__()
+        if self.verbose:
+            timer.__exit__()
 
         # return NN_idx[:, 1:], distances[:, 1:]
         self.kNN_idx = NN_idx[:, 1:]
@@ -756,15 +766,17 @@ class NNDescent(kNNIndex):
             err_str += f" constructed!  (Run kNNIndex.fit(X, k_NN))"
             raise ValueError(err_str)
 
-        timer_str =  f"Finding {k_NN} approximate nearest neighbors to query "
-        timer_str += f" points in the existing NN graph using `pynndescent`"
-        timer_str += f" and the '{self.metric}' metric..."
-        timer = utl.Timer(timer_str, verbose=self.verbose)
-        timer.__enter__()
+        if self.verbose:
+            timer_str =  f"Finding {k_NN} approximate nearest neighbors to"
+            timer_str += f" query points in the existing NN graph using"
+            timer_str += f" `pynndescent` and the '{self.metric}' metric..."
+            timer = utl.Timer(timer_str, verbose=self.verbose)
+            timer.__enter__()
 
         NN_idx, distances = self.index.query(query, k=k_NN)
 
-        timer.__exit__()
+        if self.verbose:
+            timer.__exit__()
 
         return NN_idx, distances
 
