@@ -54,8 +54,7 @@ def human_round(x,
         Options are 'up', 'down', and 'none'.
     """
 
-    if not is_iterable(x):
-        x = np.asarray([x])
+    x = np.asarray([x]).squeeze().astype(float)
 
     if not inplace:
         x = x.copy()

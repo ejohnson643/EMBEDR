@@ -25,9 +25,13 @@
 ###############################################################################
 """
 from EMBEDR.embedr import EMBEDR, EMBEDR_sweep
+from EMBEDR.human_round import human_round
 import EMBEDR.plotting_utility as putl
+import EMBEDR.utility as utl
 
+import anndata as ad
 import matplotlib
+import matplotlib.gridspec as gs
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -37,6 +41,350 @@ import warnings
 
 warnings.filterwarnings("ignore", message="This figure includes Axes that")
 warnings.filterwarnings("ignore", message="tight_layout not applied: ")
+warnings.filterwarnings("ignore", message="Creating an ndarray from ragged")
+
+
+def _make_figure_grid(fig_size=(7.2, 5.76), 
+                      n_rows=2,
+                      n_cols=2,
+                      show_all_borders=False,
+                      wspace=0.005,
+                      hspace=0.01,
+                      spines_2_show='all',
+                      spine_alpha=0.5,
+                      spine_width=1.0):
+
+    back_spine_alpha = 0
+    if show_all_borders:
+        back_spine_alpha = 1
+
+    fig = plt.figure(figsize=fig_size)
+
+    back_axis = fig.add_subplot(111)
+    back_axis = putl.make_border_axes(back_axis, spine_alpha=back_spine_alpha)
+
+    main_gs = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
+                               wspace=wspace, hspace=hspace)
+
+    main_axes = []
+    for rowNo in range(n_rows):
+        axes_row = []
+        for colNo in range(n_cols):
+            ax = fig.add_subplot(main_gs[rowNo, colNo])
+            ax = putl.make_border_axes(ax, spines_2_show=spines_2_show,
+                                       spine_alpha=spine_alpha,
+                                       spine_width=spine_width)
+            axes_row.append(ax)
+        main_axes.append(axes_row)
+
+    return fig, back_axis, main_gs, main_axes
+
+
+def _add_plot_colored_by_cluster(Y,
+                                 labels,
+                                 axis,
+                                 colors,
+                                 sizes,
+                                 labels_2_hl,
+                                 scatter_alpha=0.2):
+
+    hax = axis.scatter(*Y.T, c=colors, s=sizes, alpha=scatter_alpha)
+
+    for lNo, lab in enumerate(labels_2_hl):
+        good_idx = (labels == lab).squeeze()
+
+        label_median = np.median(Y[good_idx], axis=0)
+
+        axis.text(*label_median, "{}".format(lNo + 1), fontsize=12,
+                  fontweight='bold', va='center', ha='center')
+
+    return hax
+
+
+def _add_plot_colored_by_var(Y,
+                             labels,
+                             axis,
+                             sizes,
+                             scatter_alpha=0.2,
+                             reverse_label=False):
+
+    sort_idx = np.argsort(labels)
+    if reverse_label:
+        sort_idx = sort_idx[::-1]
+
+    hax = axis.scatter(*Y[sort_idx].T, c=labels[sort_idx], s=sizes[sort_idx],
+                       alpha=scatter_alpha)
+
+    return hax
+
+
+    
+
+
+def EMBEDR_Figure_01(X,
+                     metadata=None,
+                     data_dir=None,
+                     embedding_params=None,
+                     EMBEDR_params=None,
+                     project_dir="./",
+                     project_name="EMBEDR_Figure_01v1_DimRedZoology",
+                     color_by_cluster=True,
+                     label_name="cell_ontology_class",
+                     labels_2_hl=None,
+                     label_colors=None,
+                     label_sizes=None,
+                     label_params=None,
+                     grid_params=None,
+                     n_rows=2,
+                     n_cols=2,
+                     scatter_alpha=0.2,
+                     title_size=14,
+                     title_pad=-15,
+                     add_panel_numbers=False,
+                     fig_dir="./",
+                     fig_pad=None):
+
+    if metadata is None:
+        load_metadata = True
+
+    data_name = ""
+    if isinstance(X, str):
+        data_name = X.title()
+        if load_metadata:
+            X, metadata = utl.load_data(X, data_dir=data_dir)
+        else:
+            X = utl.load_data(X, data_dir=data_dir, load_metadata=False)
+
+    if metadata is None:
+        err_str  = f"Metadata must be either loadable with `utl.load_data`"
+        err_str += f" or provided.  Metadata is currently `None`..."
+        raise ValueError(err_str)
+
+    if embedding_params is None:
+        embedding_params = [('tSNE', 9),   ('UMAP', 15),
+                            ('tSNE', 350), ('UMAP', 400)]
+
+    if EMBEDR_params is None:
+        EMBEDR_params = {}
+
+    if color_by_cluster:
+        if label_params is None:
+            label_params = {}
+
+        [labels,
+         label_counts,
+         long_labels,
+         lab_2_idx_map,
+         label_cmap] = putl.process_categorical_label(metadata,
+                                                      label_name,
+                                                      **label_params)
+
+        if labels_2_hl is None:
+            labels_2_hl = label_counts.index.values[:10]
+
+        if label_colors is None:
+            label_colors = [label_cmap[lab_2_idx_map[ll]] if ll in labels_2_hl
+                            else 'lightgrey'for ll in labels]
+        
+        if label_sizes is None:
+            label_sizes = [3 if ll in labels_2_hl else 1 for ll in labels]
+
+    elif label_sizes is None:
+        label_sizes = 3 * np.ones((len(X)))
+
+    if grid_params is None:
+        grid_params = {}
+
+    [fig,
+     back_axis,
+     main_gs,
+     main_axes] = _make_figure_grid(n_rows=n_rows, n_cols=n_cols,
+                                    **grid_params)
+
+    if EMBEDR_params is None:
+        EMBEDR_params = {'verbose': 1}
+
+    for algNo, (alg, param) in enumerate(embedding_params):
+        print(f"Plotting data embedded by {alg} (param = {param})")
+
+        if alg.lower() in ['tsne', 't-sne']:
+            embObj = EMBEDR(X=X,
+                            perplexity=param,
+                            DRA='tsne',
+                            n_data_embed=1,
+                            n_jobs=-1,
+                            project_name=project_name,
+                            project_dir=project_dir)
+            Y, _ = embObj.get_tSNE_embedding(X)
+            kEff = human_round(embObj.kEff)
+            title = f"t-SNE: " + r"$k_{Eff} \approx $" + f"{kEff:.0f}"
+
+            if not color_by_cluster:
+                labels = np.log10(embObj._kEff)
+
+        if alg.lower() in ['umap']:
+            embObj = EMBEDR(X=X,
+                            n_neighbors=param,
+                            DRA='umap',
+                            n_data_embed=1,
+                            n_jobs=-1,
+                            project_name=project_name,
+                            project_dir=project_dir,
+                            **EMBEDR_params)
+            Y, _ = embObj.get_UMAP_embedding(X)
+            title = f"UMAP: " + r"$k = $" + f"{param:.0f}"
+
+            if not color_by_cluster:
+                kNN_graph = embObj.get_kNN_graph(X)
+                labels = np.log10(kNN_graph.kNN_dst[:, param - 1])
+
+        rowNo = int(algNo / n_cols)
+        colNo = int(algNo % n_cols)
+        axis = main_axes[rowNo][colNo]
+
+        if color_by_cluster:
+            hax = _add_plot_colored_by_cluster(Y[0], labels, axis,
+                                               label_colors, label_sizes,
+                                               labels_2_hl,
+                                               scatter_alpha=scatter_alpha)
+
+        else:
+            hax = _add_plot_colored_by_var(Y[0], labels, axis, label_sizes,
+                                           scatter_alpha=scatter_alpha)
+
+            cax = fig.colorbar(hax, ax=axis, pad=-0.002,
+                               drawedges=False)
+
+            c_ticks = cax.get_ticks()
+            cax.set_ticks(c_ticks, )
+            c_ticklabels = [f"{int(human_round(10**tck))}" for tck in c_ticks]
+            cax.set_ticklabels(c_ticklabels)
+            cax.ax.yaxis.set_tick_params(pad=-0.5)
+
+            if alg.lower() == 'tsne':
+                cax.set_label(r"Effective Nearest Neighbors, $k_{Eff}$",
+                              labelpad=-3)
+            if alg.lower() == 'umap':
+                cax.set_label(r"Distance to $k^{th}$ Neighbor",
+                              labelpad=-3)
+
+            cax.solids.set_edgecolor('face')
+            fig.canvas.draw()
+
+        axis.set_title(title, fontsize=title_size, pad=title_pad)
+        ylim = axis.get_ylim()
+        axis.set_ylim(ylim[0], ylim[1] + 0.1 * (ylim[1] - ylim[0]))
+
+    if color_by_cluster:
+        text_off = 0
+        text_h   = 0
+
+        ax_width = back_axis.get_window_extent().width
+        ax_height = back_axis.get_window_extent().height / fig.dpi
+
+        pad = 3
+
+        rect_width = axis.get_window_extent().width / ax_width
+
+        for lNo, lab in enumerate(labels_2_hl):
+
+            if lNo < 5:
+                x_loc = rect_width / 2
+                rect_x = 0
+            else:
+                x_loc = 1 - (rect_width / 2)
+                rect_x = 1 - rect_width
+
+            if "Slamf1-Negative" in lab:
+                lab = " ".join(lab.split(" Multipotent "))
+            label_str = f"{lNo + 1}: " + lab.title()
+
+            bb = axis.text(x_loc, -0.013 - (lNo % 5) * text_h,
+                           label_str, ha='center', va='top', fontsize=10,
+                           transform=back_axis.transAxes)
+
+            text_h = (bb.get_size() + 2 * pad) / 72. / ax_height
+
+            # if (cNo % 2) == 1:
+            #     text_off -= text_h
+
+            # rect_y = (int(cNo / 2) + 1) * text_h
+            rect_y = ((lNo % 5) + 1) * text_h
+
+            label_color = label_cmap[lab_2_idx_map[lab]]
+
+            rect = plt.Rectangle((rect_x, -rect_y),
+                                 width=rect_width,
+                                 height=text_h,
+                                 transform=back_axis.transAxes,
+                                 zorder=3,
+                                 fill=True,
+                                 facecolor=label_color,
+                                 clip_on=False,
+                                 alpha=0.8,
+                                 edgecolor='0.8')
+
+            back_axis.add_patch(rect)
+
+    fig.tight_layout()
+
+    if add_panel_numbers:
+
+        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        for rowNo in range(n_rows):
+            for colNo in range(n_cols):
+
+                axis = main_axes[rowNo][colNo]
+                letter = letters[rowNo * n_cols + colNo]
+
+                _ = putl.add_panel_number(axis, letter, edge_pad=10)
+
+    fig.tight_layout()
+
+    if color_by_cluster:
+        fig_base = project_name + f"_{data_name}" + "_ColoredByCluster"
+        fig_pad = 0.5 if fig_pad is not None else fig_pad
+    else:
+        fig_base = project_name + f"_{data_name}" + "_ColoredByVariable"
+        fig_pad = 3 if fig_pad is not None else fig_pad
+
+    print(fig_base)
+    ## SAVE FIGURE HERE
+    putl.save_figure(fig,
+                     fig_base,
+                     fig_dir=fig_dir,
+                     tight_layout_pad=fig_pad)
+
+    return fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def make_figure(X, cluster_labels, clusters_2_label=None, label_colors=None,

@@ -220,35 +220,42 @@ def add_panel_number(axis,
 
 
 ###############################################################################
-##  Functions for Colorbars
+##  Functions for Figure Aesthetics
 ###############################################################################
 
 
-def make_categ_cmap(change_points=[0, 2, 3, 4, 5],
-                    categorical_cmap=None,
-                    cmap_idx=None,
-                    cmap_dx=0.001,
-                    reverse_last_interval=True):
+class CategoricalFadingCMap(object):
     """Make categorical colormap that fades between colors at specific values.
 
-    This function takes in a list of end points + interior points to set as
-    the edge of regions on a colormap.  The function then returns a new
-    continuous colormap that transitions between these regions (fades to white,
-    then changes colors).
+    This class creates a blended categorical-continuous colormap in which
+    designated colors are faded to black or white in descrete regions.  As an
+    example, this class is used to create the p-value colorbars in the EMBEDR
+    plotting functions, where different levels of p-values are given different
+    colors, but within each level, the color also fades as a p-value goes from
+    one end of the category to the other.  This is useful for situations in
+    which values have discrete bins into which they can be mapped, but we still
+    want to see the individual variation in points.
+
+    The default arguments are set to that used by EMBEDR for p-value colorbars.
 
     Parameters
     ----------
-    change_points: Iterable (optional)
+    change_points: Iterable (optional, default=[0, 2, 3, 4, 5])
         The values at which to change between categories.  The end-points (the
         max and min values to be shown on the colormap) must be supplied so
         that if 4 categories are desired, `change_points` must contain 4 + 1
-        values.
+        values.  These values are in units of the measurement being used to
+        assign colors to points, i.e. if height is being used to color points,
+        then change_points might be [1ft, 2ft, 4ft, 6ft], so that there are 3
+        height categories: 1-2ft, 2-4ft, and 4-6ft.  All values outside this
+        range will be mapped to the minimum and maximum color of the range
+        (i.e. a 7ft person would have the same color as a 6ft person).
 
-    categorical_cmap: Seaborn colormap object (optional)
-        A categorical colormap (list of tuples) to which the intervals between
-        `change_points` will be mapped.
+    base_cmap: Union[str, Iterable of tuples] (optional, default='colorblind')
+        A categorical colormap (list of tuples) or the name of a Seaborn 
+        colormap to which the intervals between `change_points` will be mapped.
 
-    cmap_idx: Iterable (optional)
+    cmap_idx: Iterable (optional, default=[4, 0, 3, 2])
         A list of indices that maps the colors in the colormap to the correct
         interval. This allows for preset colormaps to be remapped by changing
         `cmap_idx` from [0, 1, 2, 3] to [2, 3, 1, 0], for example.
@@ -256,72 +263,181 @@ def make_categ_cmap(change_points=[0, 2, 3, 4, 5],
     cmap_dx: float (optional, default=0.001)
         Interval at which to interpolate colors.  Smaller will make the
         colormap seem more continuous, but may have trouble rendering on some
-        computers.
+        computers.  If `cmap_dx` < 1, this will be interpreted as an interval
+        size in the units of `change_points`.  If `cmap_dx` > 1, this will
+        be interpreted as the number of interpolation intervals to calculate
+        across `change_points`.
+
+    cmap_kwds: dict (optional, default={})
+        Other keywords to pass to `matplotlib.colors.ListedColormap` object.
+
+    max_divergence: float (optional, default=0.75)
+        Maximal distance between white/black and the category color to allow
+        in each region.  Setting to 0 will keep the colors constant in each
+        category, while setting to 1 will allow the colors to fade entirely to
+        black or white.
 
     reverse_last_interval: bool (optional, default=True)
         Flag indicating whether to reverse the interpolation direction on the
         last interval.  This can be useful to set up a maximal contrast in one
         part of the colormap.
+
+    fade_to_white: bool (optional, default=True)
+        Flag indicating whether the colors should fade to white or black within
+        a category.
     """
 
-    if categorical_cmap is None:
-        import seaborn as sns
-        categorical_cmap = sns.color_palette('colorblind')
+    def __init__(self,
+                 change_points=[0, 2, 3, 4, 5],
+                 base_cmap='colorblind',
+                 cmap_idx=None,
+                 cmap_dx=0.001,
+                 cmap_kwds=None,
+                 max_divergence=0.75,
+                 reverse_last_interval=True,
+                 fade_to_white=True):
 
-    ## Set the list of indices to use from the colormap
-    if cmap_idx is None:
-        cmap_idx = [4, 0, 3, 2] + list(range(4, len(change_points) - 1))
+        self.change_points  = change_points
+        self.base_cmap      = base_cmap
+        self.cmap_idx       = cmap_idx
+        self.cmap_dx        = cmap_dx
+        self.cmap_kwds      = cmap_kwds
+        self.max_divergence = max_divergence
 
-    ## Set the base colors for regions of the colormap
-    colors = [categorical_cmap[idx] for idx in cmap_idx]
+        ## Optional flags
+        self.reverse_last_interval = reverse_last_interval
+        self.fade_to_white         = fade_to_white
 
-    ## Make an appropriate grid of points on which to set colors.
-    color_grid = []
-    for intNo, end in enumerate(change_points[1:]):
-        color_grid += list(np.arange(change_points[intNo], end, cmap_dx))
-    color_grid += [change_points[-1]]
-    color_grid = np.sort(np.unique(np.asarray(color_grid)).squeeze())
+        self._validate_parameters()
 
-    ## Initialize the RGB+ array.
-    out_colors = np.ones((len(color_grid), 4))
+        self.cmap, self.cnorm = self.make_cmap()
 
-    ## Iterate through the grid, setting interpolated colors for each region.
-    start_idx = 0
-    for intNo, start in enumerate(change_points[:-1]):
+    def _validate_parameters(self):
 
-        ## Get the number of grid points in this interval
-        N_ticks = int((change_points[intNo + 1] - start) / cmap_dx)
-        ## If it's the last interval, add an extra.
-        if intNo == (len(change_points) - 2):
-            N_ticks += 1
+        try:
+            self.change_points = np.unique([el for el in self.change_points])
+            self.change_points = np.sort(self.change_points).squeeze()
+            self.n_categ = len(self.change_points) - 1
+        except TypeError as te:
+            err_str = "Input argument `change_points` is not iterable!"
+            raise TypeError(err_str)
 
-        ## Iterate through each of the RGB values.
-        for jj in range(3):
+        if isinstance(self.base_cmap, str):
+            self.base_cmap = sns.color_palette(self.base_cmap)
+        else:
+            try:
+                _ = self.base_cmap[0]
+            except TypeError as err:
+                err_str  = err.args[0] + f"\n\n\t    Input `base_cmap` could"
+                err_str += f" not be indexed (_ = cmap[0] failed).  Make sure"
+                err_str += f" `base_cmap` is either a subscriptable colormap"
+                err_str += f" or an iterable containing colors from which to"
+                err_str += f" create the categorical colormap."
+                raise TypeError(err_str)
+        self._n_base_colors = len(self.base_cmap)
 
-            ## Base color for each interval
-            base_color = colors[intNo][jj]
+        if self.cmap_idx is None:
+            self.cmap_idx = [4, 0, 3, 2] + list(range(4, self.n_categ))
 
-            ## Maximum divergence from the base color.
-            upper_bound = 0.75 * (1 - base_color) + base_color
+        try:
+            [el for el in self.cmap_idx]
+            assert len(self.cmap_idx) == self.n_categ
+        except TypeError as te:
+            err_str = "Input argument `change_points` is not iterable!"
+            raise TypeError(err_str)
+        except AssertionError as ae:
+            err_str  = f"Input size of `cmap_idx` does not map the number of"
+            err_str += f" categories indicated by `change_points`"
+            err_str += f" ({self.n_categ} != {len(self.cmap_idx)}). There must"
+            err_str += f" be one index in `cmap_idx` for each category."
+            raise ValueError(err_str)
 
-            ## Interpolated grid for the interval.
-            intv_color_grid = np.linspace(base_color, upper_bound, N_ticks)
+        try:
+            self.cmap_dx = float(self.cmap_dx)
+            assert self.cmap_dx > 0
+        except (AssertionError, ValueError) as err:
+            err_str = f"Input argument `cmap_dx` must be a positive float."
+            raise ValueError(err_str)
 
-            ## If we're in the last interval, can reverse the direction
-            if (intNo == (len(change_points) - 2)) and reverse_last_interval:
-                intv_color_grid = intv_color_grid[::-1]
+        if self.cmap_dx > 1:
+            self.cmap_dx = ((self.change_points[-1] - self.change_points[0])
+                            / self.cmap_dx)
 
-            ## Set the colors!
-            out_colors[start_idx:start_idx + N_ticks, jj] = intv_color_grid
+        if self.cmap_kwds is None:
+            self.cmap_kwds = {'name': "EMBEDR p-Values (-log10)"}
+        err_str = f"Input argument `cmap_kwds` must be a dictionary!"
+        assert isinstance(self.cmap_kwds, dict), err_str
+        self.cmap_kwds = self.cmap_kwds.copy()
 
-        start_idx += N_ticks
+        try:
+            self.max_divergence = float(self.max_divergence)
+            assert 1 > self.max_divergence > 0
+        except (AssertionError, ValueError) as err:
+            err_str = f"Input argument `max_divergence` must be in [0, 1]."
+            raise ValueError(err_str)
 
-    ## Convert the grids and colors to matplotlib colormaps.
-    import matplotlib.colors as mcl
-    out_cmap = mcl.ListedColormap(out_colors)
-    out_cnorm = mcl.BoundaryNorm(color_grid, out_cmap.N)
+        self.reverse_last_interval = bool(self.reverse_last_interval)
+        self.fade_to_white = bool(self.fade_to_white)
 
-    return out_cmap, out_cnorm
+    def make_cmap(self):
+
+        ## Get the base colors of the categories.
+        self.base_colors = [self.base_cmap[idx] for idx in self.cmap_idx]
+
+        ## Make an appropriate grid of points on which to set colors.
+        color_grid = []
+        for start, end in zip(self.change_points[:-1], self.change_points[1:]):
+            color_grid += list(np.arange(start, end, self.cmap_dx))
+        color_grid += [self.change_points[-1]]
+        ## This checks that we didn't double up any grid points.
+        color_grid = np.sort(np.unique(np.asarray(color_grid)).squeeze())
+
+        ## Initialize the RGB+ array.
+        final_colors = np.ones((len(color_grid), 4))
+
+        ## Iterate through the category boundaries, setting interpolated colors
+        ## for each category.
+        cat_idx = 0
+        for catNo, [start, end] in enumerate(zip(self.change_points[:-1],
+                                                 self.change_points[1:])):
+            ## Get the number of grid points in this interval
+            n_ticks = int((end - start) / self.cmap_dx)
+            ## If it's the last interval, add an extra.
+            if end == self.change_points[-1]:
+                n_ticks += 1
+
+            ## Iterate through each of the RGB values.
+            for jj in range(3):
+
+                ## Base color for each interval
+                base_color = self.base_colors[catNo][jj]
+
+                ## Maximum divergence from the base color.
+                top = 1 if self.fade_to_white else 0
+                color_diff = self.max_divergence * (top - base_color)
+                upper_bound = color_diff + base_color
+
+                ## Interpolated grid for the interval.
+                intv_color_grid = np.linspace(base_color, upper_bound, n_ticks)
+
+                ## If we're in the last interval, can reverse the direction
+                if catNo == (self.n_categ - 1):
+                    if self.reverse_last_interval:
+                        intv_color_grid = intv_color_grid[::-1]
+
+                ## Set the colors!
+                final_colors[cat_idx:cat_idx + n_ticks, jj] = intv_color_grid
+
+            cat_idx += n_ticks
+
+        ## Convert the grids and colors to matplotlib colormaps.
+        cmap = mcl.ListedColormap(final_colors, **self.cmap_kwds)
+        cmap.set_extremes(bad='lightgrey',
+                          under=self.base_colors[0],
+                          over=self.base_colors[-1])
+        cnorm = mcl.BoundaryNorm(color_grid, cmap.N)
+
+        return cmap, cnorm
 
 
 def make_seq_cmap(color_1, color_2, n_colors=10):
@@ -463,4 +579,30 @@ def wrap_strings(str_arr, line_len=26):
             out_list.append(out_lines[best_idx])
 
     return out_list
+
+
+def process_categorical_label(metadata, label, cmap='colorblind',
+                              alphabetical_sort=False):
+
+    ## Extract the raw labels
+    raw_labels = metadata[label].values.copy()
+
+    ## Get the unique labels and their counts
+    label_counts = metadata[label].value_counts()
+    unique_labels = label_counts.index.values
+
+    if alphabetical_sort:
+        unique_labels = np.sort(unique_labels)
+
+    ## Make some nice long labels.
+    long_labels = np.asarray([f"{ll} (N = {label_counts.loc[ll]:d})"
+                              for ll in unique_labels])
+
+    ## Make a colormap
+    if isinstance(cmap, str):
+        label_cmap = sns.color_palette(cmap, len(unique_labels))
+
+    lab_2_idx_map = {ll: ii for ii, ll in enumerate(unique_labels)}
+
+    return raw_labels, label_counts, long_labels, lab_2_idx_map, label_cmap
 

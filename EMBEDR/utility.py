@@ -1,5 +1,7 @@
 from collections import Counter
 import numpy as np
+import os
+import pandas as pd
 import scanpy as sc
 from time import time
 
@@ -49,8 +51,9 @@ def load_data(data_name,
         X = np.loadtxt(data_path).astype(dtype)
 
         if load_metadata:
-            metadata_path = path.join(data_dir, "mnist2500_labels.txt")
+            metadata_path = os.path.join(data_dir, "mnist2500_labels.txt")
             metadata = np.loadtxt(metadata_path).astype(int)
+            metadata = pd.DataFrame(metadata, columns=['label'])
 
     elif data_name.lower() in tabula_muris_tissues:
 
@@ -61,6 +64,9 @@ def load_data(data_name,
         data_path = os.path.join(data_dir, data_file)
 
         X = sc.read_h5ad(data_path)
+        metadata = X.obs.copy()
+
+        X = X.obsm['X_pca']
 
     elif data_name.lower() == "ATAC":
 
@@ -71,8 +77,14 @@ def load_data(data_name,
         data_path = os.path.join(data_dir, data_file)
 
         X = sc.read_h5ad(data_path)
+        metadata = X.obs.copy()
 
-    return X, metadata
+        X = X.obsm['lsi']
+
+    if load_metadata:
+        return X, metadata
+    else:
+        return X
 
 
 ###############################################################################
