@@ -446,6 +446,9 @@ class tSNE_Embed:
                     ## ... fix the affinity matrix...
                     if exaggeration != 1:
                         P /= exaggeration
+                    ## ... report the runtime...
+                    if self.verbose >= 1:
+                        timer.__exit__()
                     ## ... and quit the loop!
                     raise OptimizationInterrupt(error=d_kl,
                                                 final_embedding=self.embedding)

@@ -138,13 +138,13 @@ def make_border_axes(axis,
         axis.set_xticks(xticks)
 
     if xticklabels is not None:
-        axis.set_xticks(xticklabels)
+        axis.set_xticklabels(xticklabels)
 
     if yticks is not None:
         axis.set_yticks(yticks)
 
     if yticklabels is not None:
-        axis.set_yticks(yticklabels)
+        axis.set_yticklabels(yticklabels)
 
     axis.set_visible(visible)
 
@@ -217,6 +217,38 @@ def add_panel_number(axis,
     axis.text(p_X0, p_Y0, number, transform=axis.transAxes, **default_kws)
 
     return axis
+
+
+###############################################################################
+##  Functions for 3D Figures
+###############################################################################
+
+def generate_rotations(fig,
+                       axis,
+                       angles=range(360),
+                       file_name="3DAnimation_",
+                       elevation=15):
+
+    files = []
+    for ii, angle in enumerate(angles):
+        if ii % 30 == 0:
+            print(f"{ii}: Angle = {angle}")
+        ax.view_init(elev = elevation, azim=angle)
+        fname = f'{file_name}_{ii}.jpeg'
+        fig.savefig(fname)
+        files.append(fname)
+
+    return files
+
+
+def animate_gif(files, output, delay=3, repeat=True):
+    """
+    Uses imageMagick to produce an animated .gif from a list of
+    picture files.
+    """
+    loop = -1 if repeat else 0
+    file_list = " ".join(files)
+    os.system(f'convert -delay {delay} -loop {loop} {file_list} {output}')
 
 
 ###############################################################################
