@@ -157,13 +157,13 @@ class SweepBoxplot(object):
                                  fig_pad=self.fig_pad)
         return
 
-    def make_plot(self, **kwargs):
+    def plot(self, **kwargs):
 
         self.axis = self.fig.add_subplot(self.inner_gs[0])
         self.axis = putl.make_border_axes(self.axis,
                                           spine_alpha=self.spine_alpha)
 
-        self.axis = self._make_plot(**kwargs)
+        self.axis = self._plot(**kwargs)
 
         self.axis.grid(which='major', axis='x', alpha=0)
 
@@ -185,7 +185,7 @@ class SweepBoxplot(object):
 
         return self.axis
 
-    def _make_plot(self, **kwargs):
+    def _plot(self, **kwargs):
 
         return self.axis
 
@@ -263,9 +263,9 @@ class SweepBoxplot_pValues(SweepBoxplot):
 
         return
 
-    def make_plot(self, **kwargs):
+    def plot(self, **kwargs):
 
-        self.axis = super().make_plot(**kwargs)
+        self.axis = super().plot(**kwargs)
 
         self._cAx = self._add_colorbar()
 
@@ -273,7 +273,7 @@ class SweepBoxplot_pValues(SweepBoxplot):
 
         return self.axis
 
-    def _make_plot(self, **kwargs):
+    def _plot(self, **kwargs):
 
         hl_boxes = {}
         for hpNo, hpVal in enumerate(self.hp_array):
@@ -431,15 +431,15 @@ class SweepBoxplot_EES(SweepBoxplot):
         if self.box_positions is None:
             self.box_positions = np.arange(self.n_hp)
 
-    def make_plot(self, **kwargs):
+    def plot(self, **kwargs):
 
-        self.axis = super().make_plot(**kwargs)
+        self.axis = super().plot(**kwargs)
 
         self.update_tight_bounds()
 
         return self.axis
 
-    def _make_plot(self, **kwargs):
+    def _plot(self, **kwargs):
 
         min_pVal, max_pVal = np.inf, -np.inf
         hl_boxes = {}
