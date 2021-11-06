@@ -1986,6 +1986,19 @@ class EMBEDR(object):
                                   cite_EMBEDR=cite_EMBEDR,
                                   **plot_kwds)
 
+        elif plot_type.lower() in ['perplexity']:
+
+            from EMBEDR.plots.embedr_scatterplots import Scatterplot
+
+            plotObj = Scatterplot(plot_Y,
+                                  self.perplexity,
+                                  fig=fig,
+                                  axis=axis,
+                                  cbar_ax=cbar_ax,
+                                  show_cbar=show_cbar,
+                                  cite_EMBEDR=cite_EMBEDR,
+                                  **plot_kwds)
+
         elif (metadata is not None) and (plot_type in metadata):
 
             if is_categorical:
@@ -2640,6 +2653,87 @@ class EMBEDR_sweep(object):
                                         # xticks=xticks,
                                         xticklabels=xticklabels,
                                         **kwargs)
+
+    def plot_embedding(self,
+                       param_2_plot='optimal',
+                       plot_type='pvalue',
+                       metadata=None,
+                       is_categorical=False,
+                       plot_data=True,
+                       embed_2_show=0,
+                       fig=None,
+                       axis=None,
+                       cbar_ax=None,
+                       show_cbar=True,
+                       cite_EMBEDR=True,
+                       **plot_kwds):
+
+        if param_2_plot == 'optimal':
+            try:
+                return self.opt_obj.plot(plot_type=plot_type,
+                                         metadata=metadata,
+                                         is_categorical=is_categorical,
+                                         plot_data=plot_data,
+                                         embed_2_show=embed_2_show,
+                                         fig=fig,
+                                         axis=axis,
+                                         cbar_ax=cbar_ax,
+                                         show_cbar=show_cbar,
+                                         cite_EMBEDR=cite_EMBEDR,
+                                         **plot_kwds)
+            except AttributeError:
+                err_str  = f"Could not plot 'optimal' embedding as it does not"
+                err_str += f" exist.  (Run EMBEDR_sweep.fit_samplewise_optimal"
+                err_str += f" or set `param_2_plot` to a value that was"
+                err_str += f" swept by the hyperparameter sweep in `fit`."
+                raise ValueError(err_str)
+
+        perp = knn = None
+        if self.sweep_type == 'perplexity':
+            perp = param_2_plot
+        else:
+            knn = param_2_plot
+
+        tmpEmb = EMBEDR(perplexity=perp,
+                        n_neighbors=knn,
+                        kNN_metric=self.kNN_metric,
+                        kNN_alg=self.kNN_alg,
+                        kNN_params=self.kNN_params,
+                        aff_type=self.aff_type,
+                        aff_params=self.aff_params,
+                        n_components=self.n_components,
+                        DRA=self.DRA,
+                        DRA_params=self.DRA_params,
+                        EES_type=self.EES_type,
+                        EES_params=self.EES_params,
+                        pVal_type=self.pVal_type,
+                        n_data_embed=self.n_data_embed,
+                        n_null_embed=self.n_null_embed,
+                        n_jobs=self.n_jobs,
+                        random_state=self.rs,
+                        verbose=0,
+                        do_cache=self.do_cache,
+                        project_name=self.project_name,
+                        project_dir=self.project_dir)
+
+        tmpEmb.data_Y = self.embeddings[param_2_plot]
+        tmpEmb.data_EES = self.data_EES[param_2_plot]
+        tmpEmb.null_EES = self.null_EES[param_2_plot]
+        tmpEmb.pValues = self.pValues[param_2_plot]
+
+        return tmpEmb.plot(plot_type=plot_type,
+                           metadata=metadata,
+                           is_categorical=is_categorical,
+                           plot_data=plot_data,
+                           embed_2_show=embed_2_show,
+                           fig=fig,
+                           axis=axis,
+                           cbar_ax=cbar_ax,
+                           show_cbar=show_cbar,
+                           cite_EMBEDR=cite_EMBEDR,
+                           **plot_kwds)
+
+
 
 
 

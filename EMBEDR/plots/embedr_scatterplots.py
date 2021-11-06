@@ -261,6 +261,8 @@ class Scattergory(Scatterplot):
         if self.cmap is None:
             self.cmap = 'husl'
 
+        print(self.category_kwds)
+
         out = putl.process_categorical_label(metadata,
                                              label,
                                              cmap=self.cmap,
@@ -291,21 +293,25 @@ class Scattergory(Scatterplot):
                 color = self.label_cmap[self._l2i_map[label]]
 
                 if self.show_legend:
-                    title = self.long_labels[lNo]
+                    title = self.long_labels[self._l2i_map[label]]
                     if "Multipotent" in title:
                         title = " ".join(title.split(" Multipotent "))
                 else:
                     title = None
 
+                zorder = None
+
             else:
                 color = self.bkgd_label_kwds['color']
                 title = None
+                zorder = -1
 
             self.axis.scatter(*self.Y[good_idx, :2].T,
                               color=color,
                               s=self.sct_s[good_idx],
                               alpha=self.sct_a,
                               label=title,
+                              zorder=zorder,
                               **self.sct_kwds)
 
         if self.show_legend:

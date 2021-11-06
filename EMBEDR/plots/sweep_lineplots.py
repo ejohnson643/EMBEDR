@@ -161,6 +161,9 @@ def sweep_lineplot_byCat(hyperparam_array,
 
     n_labels = len(label_counts)
 
+    if labels_2_show == 'all':
+        labels_2_show = label_counts.index.values
+
     if n_rows is None:
         n_rows = int(np.ceil(n_labels / n_cols))
 

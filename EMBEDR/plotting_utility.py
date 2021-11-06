@@ -624,7 +624,9 @@ def process_categorical_label(metadata, label, cmap='colorblind',
     unique_labels = label_counts.index.values
 
     if alphabetical_sort:
-        unique_labels = np.sort(unique_labels)
+        str_labels = unique_labels.astype(str)
+        unique_labels = unique_labels[np.argsort(str_labels)]
+    label_counts = label_counts.reindex(unique_labels)
 
     ## Make some nice long labels.
     long_labels = np.asarray([f"{ll} (N = {label_counts.loc[ll]:d})"
