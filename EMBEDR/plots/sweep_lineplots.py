@@ -462,6 +462,9 @@ class SweepLineplot_Category(object):
             self.axes = gridspec.subplots(sharex=self.ax_sharex,
                                           sharey=self.ax_sharey)
 
+        if self.axes.ndim != 2:
+            self.axes = self.axes.reshape(self.n_rows, self.n_cols)
+
         for rowNo in range(len(self.axes)):
                 for colNo in range(self.n_cols):
                     axis = self.axes[rowNo][colNo]

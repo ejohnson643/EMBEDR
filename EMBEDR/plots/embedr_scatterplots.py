@@ -196,7 +196,7 @@ class Scatter_by_pValue(Scatterplot):
             if isinstance(self._cmap, putl.CategoricalFadingCMap):
                 self.cbar_ticks = self._cmap.change_points
             else:
-                self.cbar_ticks = [0, 2, 3, 4, 5]
+                self.cbar_ticks = [0, 1, 2, 3, 5]
 
         if self.cbar_ticklabels is None:
             if self.log_labels:

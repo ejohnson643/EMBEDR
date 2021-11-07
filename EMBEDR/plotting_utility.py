@@ -320,7 +320,7 @@ class CategoricalFadingCMap(object):
     """
 
     def __init__(self,
-                 change_points=[0, 2, 3, 4, 5],
+                 change_points=[0, 1, 2, 3, 5],
                  base_cmap='colorblind',
                  cmap_idx=None,
                  cmap_dx=0.001,

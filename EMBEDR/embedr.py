@@ -2600,63 +2600,40 @@ class EMBEDR_sweep(object):
 
         return axis
 
-    def sweep_lineplot(self, sweep_type='pvalues', metadata=None, labels=None, 
-                       params_2_highlight=None, fig=None, axis=None,
-                       xticks=[], xticklabels=[], **kwargs):
+    def sweep_lineplot(self, sweep_type='pvalues', metadata=None, label=None,
+                       labels_2_show=None, fig=None, axis=None, **kwargs):
         """Generates lineplots of each cell vs swept hyperparameters."""
 
         hp_values = np.sort(self.sweep_values)
-        n_hp = len(hp_values)
-
-        if params_2_highlight is None:
-            hp_2_hl = []
-        else:
-            hp_2_hl = params_2_highlight
-        hp_2_hl_idx = np.array([ii for ii, hp in enumerate(hp_values)
-                                if hp in hp_2_hl]).astype(int)
-
-        if len(xticks) < 1:
-            if len(hp_2_hl) > 0:
-                xticks = [0] + hp_2_hl_idx.tolist() + [n_hp - 1]
-            else:
-                if n_hp <= 5:
-                    xticks = np.arange(n_hp)
-                else:
-                    xticks = np.unique(np.linspace(0, n_hp, 5))
-                    xticks = np.clip(xticks, 0, n_hp - 1)
-        xticks = np.asarray(xticks).astype(int)
-
-        if len(xticklabels) == 0:
-            xtlabs = np.asarray([self.kEff[hp_values[idx]]
-                                 for idx in xticks])
-            xticklabels = human_round(xtlabs).squeeze().astype(int)
 
         if sweep_type.lower() == 'pvalues':
             values_dict = self.pValues
+        elif sweep_type.lower() == 'ees':
+            values_dict = {key: np.median(val, axis=0)
+                           for key, val in self.data_EES.items()}
 
-        if (metadata is None) or (labels is None):
-            from EMBEDR.plots.sweep_lineplots import sweep_lineplot
+        if (metadata is None) or (label is None):
+            from EMBEDR.plots.sweep_lineplots import SweepLineplot
 
-            return sweep_lineplot(hp_values,
-                                  values_dict,
-                                  fig=fig,
-                                  axis=axis,
-                                  xticks=xticks,
-                                  xticklabels=xticklabels,
-                                  **kwargs)
+            plotObj = SweepLineplot(hp_values,
+                                    values_dict,
+                                    fig=fig,
+                                    axis=axis,
+                                    **kwargs)
 
         else:
-            from EMBEDR.plots.sweep_lineplots import sweep_lineplot_byCat
-            return sweep_lineplot_byCat(hp_values,
-                                        values_dict,
-                                        metadata,
-                                        labels,
-                                        fig=fig,
-                                        xticks=xticks,
-                                        xticklabels=xticklabels,
-                                        **kwargs)
+            from EMBEDR.plots.sweep_lineplots import SweepLineplot_Category
 
+            plotObj = SweepLineplot_Category(hp_values,
+                                             values_dict,
+                                             metadata,
+                                             label,
+                                             labels_2_show=labels_2_show,
+                                             fig=fig,
+                                             axes=axis,
+                                             **kwargs)
 
+        return plotObj.plot()
 
     def plot_embedding(self,
                        param_2_plot='optimal',
