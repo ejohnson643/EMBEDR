@@ -214,7 +214,8 @@ def EMBEDR_Figure_01(X,
                             n_data_embed=1,
                             n_jobs=-1,
                             project_name=project_name,
-                            project_dir=project_dir)
+                            project_dir=project_dir,
+                            **EMBEDR_params)
             Y, _ = embObj.get_tSNE_embedding(X)
             kEff = human_round(embObj.kEff)
             title = f"t-SNE: " + r"$k_{Eff} \approx $" + f"{kEff:.0f}"

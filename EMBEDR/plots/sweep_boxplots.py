@@ -9,6 +9,7 @@ import numpy as np
 class SweepBoxplot(object):
 
     BOX_PATCHES = ['boxes', 'whiskers', 'fliers', 'caps', 'medians']
+    GRID_KWDS = dict()
 
     def __init__(self,
                  hyperparam_array,
@@ -23,6 +24,7 @@ class SweepBoxplot(object):
                  back_wpad=0.0,
                  back_hpad=0.0,
                  fig_pad=0.4,
+                 grid_kwds=None,
                  params_2_highlight=None,
                  box_color=None,
                  box_fliers=None,
@@ -99,6 +101,10 @@ class SweepBoxplot(object):
             self.hp_2_hl = params_2_highlight
         self.hp_2_hl_idx = np.array([ii for ii, hp in enumerate(self.hp_array)
                                      if hp in self.hp_2_hl]).astype(int)
+
+        self.grid_kwds = self.GRID_KWDS.copy()
+        if grid_kwds is not None:
+            self.grid_kwds.update(grid_kwds)
 
         self.box_color     = box_color
         self.box_fliers    = box_fliers

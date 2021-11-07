@@ -245,6 +245,7 @@ class EMBEDR(object):
         return
 
     def __str__(self):
+
         out_str = ""
         if self.verbose > 1:
             out_str += f"\n\n\tEMBEDR Class v{ev}\n" + 35 * "=" + "\n\n"
@@ -2636,23 +2637,26 @@ class EMBEDR_sweep(object):
         if (metadata is None) or (labels is None):
             from EMBEDR.plots.sweep_lineplots import sweep_lineplot
 
-            axis = sweep_lineplot(hp_values,
+            return sweep_lineplot(hp_values,
                                   values_dict,
                                   fig=fig,
                                   axis=axis,
-                                  # xticks=xticks,
-                                  xticklabels=xticklabels, **kwargs)
+                                  xticks=xticks,
+                                  xticklabels=xticklabels,
+                                  **kwargs)
 
         else:
             from EMBEDR.plots.sweep_lineplots import sweep_lineplot_byCat
-            axes = sweep_lineplot_byCat(hp_values,
+            return sweep_lineplot_byCat(hp_values,
                                         values_dict,
                                         metadata,
                                         labels,
                                         fig=fig,
-                                        # xticks=xticks,
+                                        xticks=xticks,
                                         xticklabels=xticklabels,
                                         **kwargs)
+
+
 
     def plot_embedding(self,
                        param_2_plot='optimal',
@@ -2690,9 +2694,9 @@ class EMBEDR_sweep(object):
 
         perp = knn = None
         if self.sweep_type == 'perplexity':
-            perp = param_2_plot
+            perp = np.ones((self.n_samples)) * param_2_plot
         else:
-            knn = param_2_plot
+            knn = np.ones((self.n_samples)) * param_2_plot
 
         tmpEmb = EMBEDR(perplexity=perp,
                         n_neighbors=knn,

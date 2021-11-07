@@ -20,6 +20,7 @@ class Scatterplot(object):
                  labels,
                  log_labels=False,
                  axis=None,
+                 axis_kwds=None,
                  show_border=True,
                  scatter_sizes=3,
                  scatter_alpha=1,
@@ -32,6 +33,7 @@ class Scatterplot(object):
                  yticks=None,
                  yticklabels=None,
                  ylabel=None,
+                 grid_kwds=None,
                  label_size=12,
                  plot_order=None,
                  title=None,
@@ -55,6 +57,7 @@ class Scatterplot(object):
             self.labels = np.log10(self.labels)
         
         self.axis        = axis
+        self.axis_kwds   = {} if axis_kwds is None else axis_kwds.copy()
         self.show_border = show_border
 
         self.sct_s     = scatter_sizes
@@ -73,6 +76,8 @@ class Scatterplot(object):
         self.yticklabels = yticklabels
         self.ylabel      = ylabel
         self.label_size  = label_size
+
+        self.grid_kwds   = {} if grid_kwds is None else grid_kwds.copy()
 
         if plot_order is None:
             self.sort_idx = np.arange(self.n_samples)
@@ -107,9 +112,17 @@ class Scatterplot(object):
             self.fig = self.axis.figure
 
         spine_alpha = 1 if self.show_border else 0
-        self.axis = putl.make_border_axes(self.axis, spine_alpha=spine_alpha)
+        self.axis = putl.make_border_axes(self.axis,
+                                          spine_alpha=spine_alpha,
+                                          xticks=self.xticks,
+                                          yticks=self.yticks,
+                                          xticklabels=self.xticklabels,
+                                          yticklabels=self.xticklabels,
+                                          **self.axis_kwds)
 
         self.axis = self._plot(**kwargs)
+
+        self.axis.grid(**self.grid_kwds)
 
         if self.cite_EMBEDR:
             if 'transform' not in self.text_kwds:
@@ -261,8 +274,6 @@ class Scattergory(Scatterplot):
         if self.cmap is None:
             self.cmap = 'husl'
 
-        print(self.category_kwds)
-
         out = putl.process_categorical_label(metadata,
                                              label,
                                              cmap=self.cmap,
@@ -285,8 +296,6 @@ class Scattergory(Scatterplot):
             
             good_idx = self._labels == label
             n_labs = sum(good_idx)
-            # if verbose:
-            #     print(f"There are {n_labs} samples with label = {label}")
 
             if label in self.labels_2_show:
 

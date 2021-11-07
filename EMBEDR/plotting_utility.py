@@ -635,6 +635,8 @@ def process_categorical_label(metadata, label, cmap='colorblind',
     ## Make a colormap
     if isinstance(cmap, str):
         label_cmap = sns.color_palette(cmap, len(unique_labels))
+    else:
+        label_cmap = cmap
 
     lab_2_idx_map = {ll: ii for ii, ll in enumerate(unique_labels)}
 
