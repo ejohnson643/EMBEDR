@@ -21,7 +21,7 @@ class Scatterplot(object):
                  log_labels=False,
                  axis=None,
                  axis_kwds=None,
-                 show_border=True,
+                 show_border=False,
                  scatter_sizes=3,
                  scatter_alpha=1,
                  scatter_kwds=None,
@@ -111,9 +111,11 @@ class Scatterplot(object):
         else:
             self.fig = self.axis.figure
 
-        spine_alpha = 1 if self.show_border else 0
+        if 'spine_alpha' not in self.axis_kwds:
+            self.axis_kwds['spine_alpha'] = 0
+        if self.show_border:
+            self.axis_kwds['spine_alpha'] = 1
         self.axis = putl.make_border_axes(self.axis,
-                                          spine_alpha=spine_alpha,
                                           xticks=self.xticks,
                                           yticks=self.yticks,
                                           xticklabels=self.xticklabels,
