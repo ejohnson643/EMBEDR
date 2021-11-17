@@ -565,7 +565,7 @@ class SweepLineplot_Category(object):
                          self._hp_array.max() + xspan * 0.01)
 
         if self.title is None:
-            title = self.lab_proc[2][self.lab_proc[3][label]]
+            title = self.lab_proc[2][self.lab_proc[3][label]].title()
         else:
             title = self.title
         axis.set_title(title, fontsize=self.title_size,
