@@ -536,7 +536,6 @@ class EMBEDR(object):
                                                    aff_mat=self.data_P)
 
             elif (self.DRA in ['umap']):
-                print(f"WARNING: UMAP has not been implemented!")
                 dY, dEES = self.get_UMAP_embedding(X=self.data_X,
                                                    kNN_graph=self.data_kNN,
                                                    aff_mat=self.data_P)

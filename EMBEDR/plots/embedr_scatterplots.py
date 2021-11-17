@@ -265,7 +265,7 @@ class Scattergory(Scatterplot):
         except KeyError:
             self.show_legend = True
 
-        self.legend_kwds = self.LEGEND_KWDS_DEFAULT
+        self.legend_kwds = self.LEGEND_KWDS_DEFAULT.copy()
         try:
             self.legend_kwds.update(kwargs.pop('legend_kwds'))
         except KeyError:

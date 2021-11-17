@@ -219,6 +219,20 @@ def add_panel_number(axis,
     return axis
 
 
+def add_panel_numbers(axes, panel_numbers=None, **kwds):
+    
+    if panel_numbers is None:
+        panel_numbers = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    
+    for ii, axes_row in enumerate(axes):
+        for jj, axis in enumerate(axes_row):
+            idx = ii * len(axes_row) + jj
+            pNo = panel_numbers[idx]
+            
+            add_panel_number(axis, pNo, **kwds)
+    return
+
+
 ###############################################################################
 ##  Functions for 3D Figures
 ###############################################################################
@@ -613,8 +627,10 @@ def wrap_strings(str_arr, line_len=26):
     return out_list
 
 
-def process_categorical_label(metadata, label, cmap='colorblind',
-                              alphabetical_sort=False):
+def process_categorical_label(metadata, label, 
+                              cmap='colorblind',
+                              alphabetical_sort=False,
+                              labels_2_show=None):
 
     ## Extract the raw labels
     raw_labels = metadata[label].values.copy()
