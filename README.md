@@ -1,4 +1,4 @@
-# EMBEDR v2.0
+# EMBEDR
 
 Author: Eric Johnson \
 Date Created: July 1, 2021 \
@@ -16,7 +16,42 @@ statistic is generated via marginal resampling, in order to estimate whether
 samples are better-embedded than a given DRA might do by chance.
 
 For complete details, see our
-[preprint](https://www.biorxiv.org/content/10.1101/2020.11.18.389031v2). 
+[preprint](https://www.biorxiv.org/content/10.1101/2020.11.18.389031v2).
+
+## Installation
+
+To install EMBEDR, we recommend cloning this repository before installing using
+`pip` in the main project directory.  Specifically:
+
+```bash
+    pip install .
+```
+
+The package requires numpy, scikit-learn, scipy, conda, and numba for
+installation.  To generate figures, the seaborn package is required. 
+Additionally, it is recommended that you ensure that
+[fftw](https://www.fftw.org/) is installed, otherwise you will not be able to
+use the fast [FIt-SNE](https://github.com/KlugerLab/FIt-SNE) implementation of
+the t-SNE algorithm.  You can install fftw using
+[homebrew](https://formulae.brew.sh/formula/fftw).
+
+## Getting Started
+
+Once you've installed EMBEDR, you can easily generate an embedding colored by
+EMBEDR *p*-value by calling the `fit` method in the EMBEDR class as below:
+
+```python
+from EMBEDR import EMBEDR, EMBEDR_sweep
+import numpy as np
+
+X = np.loadtxt("./data/mnist2500_X.txt").astype(float)
+
+embObj = EMBEDR()
+embObj.fit(X)
+embObj.plot()
+```
+
+![Example EMBEDR Plot](EasyUseExample.png)
 
 ## New in Version 2.0
 
