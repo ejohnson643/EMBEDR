@@ -658,3 +658,29 @@ def process_categorical_label(metadata, label,
 
     return raw_labels, label_counts, long_labels, lab_2_idx_map, label_cmap
 
+
+def get_DBSCAN_clusters(Y, min_samples=10, pwd_perc=1.5):
+    from sklearn.cluster import DBSCAN
+    
+    PWD = pwd(Y, metric='euclidean')
+    PWD_triu = np.triu(PWD, k=1)
+    eps = np.percentile(PWD_triu[PWD_triu.nonzero()], pwd_perc)
+
+    DBObj = DBSCAN(eps=eps, min_samples=min_samples)
+    DBObj.fit(Y)
+
+    db_labels = DBObj.labels_
+
+    ## Count the labels
+    raw_counts = Counter(db_labels)
+    ## Sort in descending order
+    db_lab_counts = sorted(raw_counts.items(), key=lambda item: -item[1])
+    ## Remove -1 label
+    db_lab_counts = {el[0]: el[1] for el in db_lab_counts if el[0] != -1}
+    ## Create mapping from old labels to size-sorted labels
+    db_lab_remap = {old_lab: new_lab for new_lab, old_lab in enumerate(db_lab_counts.keys())}
+    ## Add -1 to map
+    if -1 in raw_counts:
+        db_lab_remap[-1] = -1
+    ## Remap labels
+    return np.asarray([db_lab_remap[old_lab] for old_lab in db_labels])

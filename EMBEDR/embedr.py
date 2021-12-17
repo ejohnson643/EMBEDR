@@ -1999,6 +1999,18 @@ class EMBEDR(object):
                                   cite_EMBEDR=cite_EMBEDR,
                                   **plot_kwds)
 
+        elif plot_type.lower() in ['keff']:
+            from EMBEDR.plots.embedr_scatterplots import Scatterplot
+
+            plotObj = Scatterplot(plot_Y,
+                                  self._kEff,
+                                  fig=fig,
+                                  axis=axis,
+                                  cbar_ax=cbar_ax,
+                                  show_cbar=show_cbar,
+                                  cite_EMBEDR=cite_EMBEDR,
+                                  **plot_kwds)
+
         elif (metadata is not None) and (plot_type in metadata):
 
             if is_categorical:
