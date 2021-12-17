@@ -65,7 +65,7 @@ sweepObj.fit(X)
 sweepObj.plot_embedding(embed_2_show=1, param_2_plot=250)
 ```
 
-![Embedding of MNIST from sweep](EasyUseExample_SweepEmbedding)
+![Embedding of MNIST from sweep](EasyUseExample_SweepEmbedding.png)
 
 In this example, at `perplexity` = 25, 100, and 250, we embedded the data 3 times, each with a different random initialization, and we embedded the null data once.  We can then plot any of the embeddings at any of the values of `perplexity` using the `plot_embedding` method shown above.  We can also visualize the entire sweep using the `sweep_boxplot` and `sweep_lineplot` functions, as shown below.
 
@@ -73,8 +73,8 @@ In this example, at `perplexity` = 25, 100, and 250, we embedded the data 3 time
 sweepObj.sweep_boxplot()
 sweepObj.sweep_lineplot()
 ```
-![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepBoxes)
-![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepLines)
+![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepBoxes.png)
+![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepLines.png)
 
 Using these figures, we can summarize the quality of t-SNE as the `perplexity` hyperparameter is varied.  Using these figures, as shown in our paper, we can determine optimal values for `perplexity` (or `n_neighbors` in UMAP), find characteristic scales and neighborhood sizes for different samples, and detect robust features in embeddings.  We can also determine the optimal `perplexity` for each sample individually and use this `perplexity` to 
 
