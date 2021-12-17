@@ -49,7 +49,34 @@ For a complete list of options, check the `EMBEDR` class documentation.
 
 ## Performing a `perplexity` Sweep
 
-Some of the most powerful results come from using EMBEDR to sweep across scales in the data by embedding data at several hyperparameter values.  This is can be performed in this package using the `EMBEDR_sweep` class.  This class wraps around the EMBEDR
+Some of the most powerful results come from using EMBEDR to sweep across scales in the data by embedding data at several hyperparameter values.  This is can be performed in this package using the `EMBEDR_sweep` class.  This class wraps around the `EMBEDR` class to manage this parameter sweep. A simple example is shown below:
+
+```python
+sweepObj = EMBEDR_sweep(project_name="EMBEDR_Sweep_Example",
+                        project_dir="./projects/",
+                        DRA='tsne',
+                        n_jobs=-1,  ## Set to -1 to use all available processors.
+                        verbose=3,  ## Set to 0 to suppress output.
+                        n_data_embed=3,
+                        n_null_embed=1,
+                        sweep_type='perplexity',
+                        sweep_values=[25, 100, 250])
+sweepObj.fit(X)
+sweepObj.plot_embedding(embed_2_show=1, param_2_plot=250)
+```
+
+![Embedding of MNIST from sweep](EasyUseExample_SweepEmbedding)
+
+In this example, at `perplexity` = 25, 100, and 250, we embedded the data 3 times, each with a different random initialization, and we embedded the null data once.  We can then plot any of the embeddings at any of the values of `perplexity` using the `plot_embedding` method shown above.  We can also visualize the entire sweep using the `sweep_boxplot` and `sweep_lineplot` functions, as shown below.
+
+```python
+sweepObj.sweep_boxplot()
+sweepObj.sweep_lineplot()
+```
+![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepBoxes)
+![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepLines)
+
+Using these figures, we can summarize the quality of t-SNE as the `perplexity` hyperparameter is varied.  Using these figures, as shown in our paper, we can determine optimal values for `perplexity` (or `n_neighbors` in UMAP), find characteristic scales and neighborhood sizes for different samples, and detect robust features in embeddings.  We can also determine the optimal `perplexity` for each sample individually and use this `perplexity` to 
 
 ## New in Version 2.0
 
