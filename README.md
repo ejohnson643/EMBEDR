@@ -83,6 +83,8 @@ sweepObj.fit_samplewise_optimal()
 sweepObj.plot_embedding()
 ```
 
+![Sample-wise optimal embedding of MNIST generated after EMBEDR sweep of perplexity](EasyUseExample_CellwiseOpt.png)
+
 To generate more embeddings or run a sweep with different hyperparameter values, the `EMBEDR` or `EMBEDR_sweep` classes can be reinitialized and fitted again.  If file caching is permitted, then the package will first look for previously generated embeddings that match the set parameters.  This means that making small changes to runs will not waste previous work.  For example, if we change `n_data_embed` to 5 after running the previous example, only 2 new embeddings will be generated for each value of `perplexity` because 3 have already be generated.  The EMBEDR package also uses this process to avoid recalculating nearest neighbor graphs and affinity matrices.
 
 ## New in Version 2.0
