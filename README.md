@@ -76,7 +76,14 @@ sweepObj.sweep_lineplot()
 ![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepBoxes.png)
 ![EMBEDR *p*-values at several values of perplexity](EasyUseExample_SweepLines.png)
 
-Using these figures, we can summarize the quality of t-SNE as the `perplexity` hyperparameter is varied.  Using these figures, as shown in our paper, we can determine optimal values for `perplexity` (or `n_neighbors` in UMAP), find characteristic scales and neighborhood sizes for different samples, and detect robust features in embeddings.  We can also determine the optimal `perplexity` for each sample individually and use this `perplexity` to 
+Using these figures, we can summarize the quality of t-SNE as the `perplexity` hyperparameter is varied.  Using these figures, as shown in our paper, we can determine optimal values for `perplexity` (or `n_neighbors` in UMAP), find characteristic scales and neighborhood sizes for different samples, and detect robust features in embeddings.  We can also determine the optimal `perplexity` for each sample individually and use this `perplexity` to generate a sample-wise optimal embedding of the data.  This is again faciliated by the `EMBEDR_sweep` class method `fit_samplewise_optimal`.  After calling this method, using the `plot_embedding` method with the `EMBEDR_sweep` class will show this sample-wise optimal embedding.  This process can only be carried out *after* a sweep has been run.  Additionally, the optimal `perplexity` values will only be selected from those used int he sweep.
+
+```python
+sweepObj.fit_samplewise_optimal()
+sweepObj.plot_embedding()
+```
+
+To generate more embeddings or run a sweep with different hyperparameter values, the `EMBEDR` or `EMBEDR_sweep` classes can be reinitialized and fitted again.  If file caching is permitted, then the package will first look for previously generated embeddings that match the set parameters.  This means that making small changes to runs will not waste previous work.  For example, if we change `n_data_embed` to 5 after running the previous example, only 2 new embeddings will be generated for each value of `perplexity` because 3 have already be generated.  The EMBEDR package also uses this process to avoid recalculating nearest neighbor graphs and affinity matrices.
 
 ## New in Version 2.0
 
