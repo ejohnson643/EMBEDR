@@ -260,7 +260,8 @@ setup(
         "scikit-learn>=0.20",
         "scipy",
         "cython",
-        "numba"
+        "numba",
+        "umap-learn"
     ],
     extras_require={
         "pynndescent": "pynndescent~=0.5.0",
