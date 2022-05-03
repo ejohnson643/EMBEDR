@@ -1,7 +1,6 @@
 from collections import Counter
 import numpy as np
 import os
-import pandas as pd
 from time import time
 
 ###############################################################################
@@ -40,6 +39,7 @@ def load_data(data_name,
               load_metadata=True):
 
     import scanpy as sc
+    import pandas as pd
 
     metadata = None
     if data_name.lower() == 'mnist':

@@ -263,8 +263,16 @@ setup(
         "numba",
         "umap-learn"
     ],
+    setup_requires=[
+        'setuptools>=18.0',
+        'numpy',
+        'cython'
+    ],
     extras_require={
         "pynndescent": "pynndescent~=0.5.0",
+        "scanpy": "scanpy>=1.0",
+        "pandas": "pandas",
+        "seaborn": "seaborn"
     },
     ext_modules=extensions,
     cmdclass={"build_ext": MyBuildExt},
