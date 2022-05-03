@@ -259,6 +259,7 @@ setup(
         "numpy>=1.16.6",
         "scikit-learn>=0.20",
         "scipy",
+        "pandas",
         "cython",
         "numba",
         "umap-learn"

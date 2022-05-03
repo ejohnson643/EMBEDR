@@ -24,7 +24,10 @@
 
 ###############################################################################
 """
-from collections import Iterable
+try:
+    from collections import Iterable
+except ImportError as err:
+    from collections.abc import Iterable
 
 import EMBEDR.affinity as aff
 import EMBEDR.callbacks as cb
