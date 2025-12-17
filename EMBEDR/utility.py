@@ -105,7 +105,7 @@ def calculate_eCDF(data, extend=False):
     ## Get the unique values in `data` and their counts (the histogram).
     counts = Counter(data.ravel())
     ## Sort the unique values
-    vals = np.msort(list(counts.keys()))
+    vals = np.sort(list(counts.keys()))
     ## Calculate the cumulative number of counts, then divide by the total.
     CDF = np.cumsum([counts[val] for val in vals])
     CDF = CDF / CDF[-1]
@@ -126,7 +126,7 @@ def get_QQ_vals(data1, data2):
     vals1, CDF1 = get_eCDF(data1, extend=True)
     vals2, CDF2 = get_eCDF(data2, extend=True)
 
-    joint_vals = np.msort(np.unique(np.hstack((vals1, vals2))))
+    joint_vals = np.sort(np.unique(np.hstack((vals1, vals2))), axis=0)
 
     joint_CDF1 = np.zeros_like(joint_vals)
     joint_CDF2 = np.zeros_like(joint_vals)

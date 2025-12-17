@@ -99,7 +99,7 @@ class EMBEDR(object):
         self.verbose       = verbose
 
         ## File I/O parameters
-        self.do_cache     = do_cache,
+        self.do_cache     = do_cache
         self.project_name = project_name
         self.project_dir  = project_dir
 
